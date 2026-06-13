@@ -1,0 +1,32 @@
+# render.yaml —— Render 部署配置
+# 在 Render 上选择 "Blueprint" 方式部署时，会自动读取这个文件。
+
+services:
+  - type: web
+    name: daoshi-app          # 服务名（也会成为网址的一部分，可改）
+    runtime: python
+    plan: free                # 免费档
+    buildCommand: pip install -r requirements.txt
+    # 用 gunicorn（生产级服务器）启动；app:app 指 app.py 里的 app 对象
+    startCommand: gunicorn app:app
+
+    # 持久磁盘：让数据库和照片重启不丢（免费档可挂 1GB）
+    disk:
+      name: data
+      mountPath: /var/data    # 挂载到这个目录
+      sizeGB: 1
+
+    envVars:
+      # 数据存到持久磁盘
+      - key: DATA_DIR
+        value: /var/data
+      # SECRET_KEY 让 Render 自动生成一串随机值（安全）
+      - key: SECRET_KEY
+        generateValue: true
+      # 初始管理员账号：部署后请在 Render 后台把这两个值改成你自己的
+      - key: ADMIN_USERNAME
+        sync: false           # sync:false 表示在后台手动填，不写死在文件里
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.12.7"

@@ -1,0 +1,27 @@
+# ⚠️ 隐私与安全：以下文件绝不上传到 GitHub
+
+# 数据库（含所有成员的姓名、联系方式、密码哈希）—— 绝对不能泄露
+app.db
+*.db
+instance/
+
+# 上传的照片（个人照片、合照）—— 隐私
+uploads/
+static/uploads/
+
+# 密钥 / 环境变量文件
+.env
+*.env
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 编辑器 / 系统杂项
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 个人材料，不公开
+我提供的材料/
