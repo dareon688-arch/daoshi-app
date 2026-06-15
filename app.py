@@ -86,6 +86,8 @@ class User(db.Model, UserMixin):
     photo = db.Column(db.String(200), nullable=True)      # 个人照片的文件名（选填）
     is_admin = db.Column(db.Boolean, default=False)       # 是否管理员（能删任意相册照片）
     status = db.Column(db.String(20), default="approved") # approved=正常 / pending=待管理员审核
+    theme = db.Column(db.String(20), default="bamboo")    # 主题：bamboo竹青 / ink墨黑 / coral朱砂
+    notify_on = db.Column(db.Boolean, default=True)       # 是否显示未读提醒红点
 
     # 把 program 代码转成中文显示用
     @property
@@ -332,8 +334,35 @@ def change_password():
             current_user.set_password(new)
             db.session.commit()
             flash("密码已修改 ✅")
-            return redirect(url_for("members"))
+            return redirect(url_for("settings"))
     return render_template("change_password.html")
+
+
+# ── 设置页：改密码入口 + 消息提醒开关 + 主题颜色 ──
+@app.route("/settings")
+@login_required
+def settings():
+    return render_template("settings.html")
+
+
+@app.route("/settings/theme", methods=["POST"])
+@login_required
+def set_theme():
+    theme = request.form.get("theme", "bamboo")
+    if theme in ("bamboo", "ink", "coral"):
+        current_user.theme = theme
+        db.session.commit()
+        flash("主题已更新 ✅")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/notify", methods=["POST"])
+@login_required
+def set_notify():
+    current_user.notify_on = (request.form.get("notify_on") == "1")
+    db.session.commit()
+    flash("提醒设置已保存 ✅")
+    return redirect(url_for("settings"))
 
 
 # ── 成员列表：所有人都能看，按入学年份排序 ──
@@ -902,6 +931,9 @@ def _total_unread(user):
 def inject_unread():
     if current_user.is_authenticated:
         try:
+            # 关了提醒开关就不显示红点
+            if getattr(current_user, "notify_on", True) is False:
+                return {"unread_total": 0}
             return {"unread_total": _total_unread(current_user)}
         except Exception:
             return {"unread_total": 0}

@@ -8,6 +8,12 @@
   ::view-transition-old(root),
   ::view-transition-new(root) { animation: none !important; }
 </style>
+{# 按用户选择的主题覆盖主色（默认竹青绿） #}
+{% if current_user.is_authenticated and current_user.theme == 'ink' %}
+<style>:root { --bamboo:#3a3a3a; --bamboo-dark:#1a1a1a; }</style>
+{% elif current_user.is_authenticated and current_user.theme == 'coral' %}
+<style>:root { --bamboo:#b1322f; --bamboo-dark:#8a2522; }</style>
+{% endif %}
 <script>
   // 注册 Service Worker（让网页可被“添加到主屏幕”安装成 App）
   if ("serviceWorker" in navigator) {
