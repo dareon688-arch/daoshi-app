@@ -112,6 +112,17 @@ class Photo(db.Model):
     uploader = db.relationship("User")
 
 
+# ── 公告表：每条公告 = 一行 ──
+class Announcement(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)        # 公告标题
+    content = db.Column(db.Text, nullable=False)             # 公告内容
+    author_id = db.Column(db.Integer, db.ForeignKey("user.id"))  # 谁发的
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # 发布时间
+
+    author = db.relationship("User")
+
+
 # Flask-Login 需要这个函数，用来根据 id 找回用户
 @login_manager.user_loader
 def load_user(user_id):
@@ -320,6 +331,54 @@ def delete_photo(photo_id):
 
     flash("照片已删除")
     return redirect(url_for("album"))
+
+
+# ── 公告：所有人可看，列表按时间倒序（最新在上） ──
+@app.route("/announcements")
+@login_required
+def announcements():
+    items = Announcement.query.order_by(Announcement.created_at.desc()).all()
+    return render_template("announcements.html", items=items)
+
+
+# ── 公告：发布（仅管理员） ──
+@app.route("/announcements/new", methods=["GET", "POST"])
+@login_required
+def new_announcement():
+    # 权限：只有管理员能发公告
+    if not current_user.is_admin:
+        flash("只有管理员能发布公告")
+        return redirect(url_for("announcements"))
+
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        content = request.form.get("content", "").strip()
+        if not title or not content:
+            flash("标题和内容都要填")
+            return render_template("new_announcement.html")
+
+        item = Announcement(title=title, content=content,
+                            author_id=current_user.id)
+        db.session.add(item)
+        db.session.commit()
+        flash("公告已发布 ✅")
+        return redirect(url_for("announcements"))
+
+    return render_template("new_announcement.html")
+
+
+# ── 公告：删除（仅管理员） ──
+@app.route("/announcements/delete/<int:item_id>", methods=["POST"])
+@login_required
+def delete_announcement(item_id):
+    if not current_user.is_admin:
+        flash("只有管理员能删除公告")
+        return redirect(url_for("announcements"))
+    item = db.get_or_404(Announcement, item_id)
+    db.session.delete(item)
+    db.session.commit()
+    flash("公告已删除")
+    return redirect(url_for("announcements"))
 
 
 # ──────────────────────────────────────────────────────────────

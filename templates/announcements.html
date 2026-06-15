@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公告 · 导师组</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    {% include '_pwa_head.html' %}
+</head>
+<body class="bg-light">
+    <div class="container py-4" style="max-width: 560px;">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="{{ url_for('members') }}" class="btn btn-sm btn-outline-secondary">‹ 成员</a>
+            <h1 class="h5 fw-bold m-0">公告栏</h1>
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('new_announcement') }}" class="btn btn-sm btn-primary">发公告</a>
+            {% else %}
+            <span style="width:64px;"></span>
+            {% endif %}
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for msg in messages %}
+              <div class="alert alert-success py-2">{{ msg }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% if not items %}
+            <p class="text-center text-muted py-5">还没有公告 📢</p>
+        {% endif %}
+
+        {% for a in items %}
+        <div class="card shadow-sm mb-3">
+            <div class="card-body">
+                <h2 class="h6 fw-bold mb-1">{{ a.title }}</h2>
+                <div class="text-muted mb-2" style="font-size:.75rem;">
+                    {{ a.author.name if a.author else '管理员' }} ·
+                    {{ a.created_at.strftime('%Y-%m-%d %H:%M') }}
+                </div>
+                <!-- white-space:pre-wrap 让换行和空格按原样显示 -->
+                <div style="white-space:pre-wrap;">{{ a.content }}</div>
+
+                {% if current_user.is_admin %}
+                <div class="mt-2">
+                    <form method="POST" action="{{ url_for('delete_announcement', item_id=a.id) }}"
+                          onsubmit="return confirm('确定删除这条公告？');" class="m-0">
+                        <button class="btn btn-link btn-sm text-danger p-0" style="font-size:.75rem;">删除</button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+
+        <p class="text-center text-muted small mt-4 mb-0">共 {{ items|length }} 条 · 内部使用</p>
+    </div>
+</body>
+</html>

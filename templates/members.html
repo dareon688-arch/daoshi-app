@@ -21,7 +21,10 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h1 class="h4 fw-bold m-0">导师组成员</h1>
-            <a href="{{ url_for('album') }}" class="btn btn-sm btn-outline-primary">📷 相册</a>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('announcements') }}" class="btn btn-sm btn-outline-primary">📢 公告</a>
+                <a href="{{ url_for('album') }}" class="btn btn-sm btn-outline-primary">📷 相册</a>
+            </div>
         </div>
 
         {% with messages = get_flashed_messages() %}
