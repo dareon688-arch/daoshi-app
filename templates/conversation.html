@@ -76,7 +76,7 @@
                      style="max-width:200px; max-height:240px; border-radius:10px; object-fit:cover;">
             </a>
             {% else %}
-            <div class="bubble">{{ m.content }}</div>
+            <div class="bubble">{{ m.content | urlize(target='_blank') }}</div>
             {% endif %}
             <div class="time">{{ m.created_at.strftime('%H:%M') }}</div>
         </div>
@@ -88,9 +88,34 @@
         <label class="btn btn-bamboo m-0 d-flex align-items-center" style="cursor:pointer;">
             <input type="file" id="imgInput" accept="image/*" hidden>图
         </label>
+        <!-- 会议按钮 -->
+        <button type="button" id="meetingBtn" class="btn btn-bamboo m-0" style="white-space:nowrap;">会议</button>
         <input type="text" id="msgInput" class="form-control" placeholder="说点什么…" autofocus>
         <button type="submit" class="btn btn-ink" style="white-space:nowrap;">发送</button>
     </form>
+
+    <!-- 发起会议弹框 -->
+    <div id="meetingModal" style="display:none; position:fixed; inset:0; z-index:2000;
+         background:rgba(0,0,0,.45); align-items:center; justify-content:center; padding:20px;">
+        <div class="gf-card" style="width:100%; max-width:360px;">
+            <div class="p-3">
+                <div class="brush mb-2" style="font-size:18px;">发起会议</div>
+                <p class="small" style="color:var(--muted);">
+                    1. 先打开腾讯会议建会<br>
+                    2. 复制会议号或链接，粘贴到下面<br>
+                    3. 点「发到群里」，同门点一下就能加入
+                </p>
+                <a href="https://meeting.tencent.com/" target="_blank"
+                   class="btn btn-bamboo w-100 mb-2">打开腾讯会议建会 ↗</a>
+                <input type="text" id="meetingInput" class="form-control mb-2"
+                       placeholder="粘贴会议号或会议链接">
+                <div class="d-flex gap-2">
+                    <button type="button" id="meetingCancel" class="btn btn-bamboo flex-grow-1">取消</button>
+                    <button type="button" id="meetingSend" class="btn btn-ink flex-grow-1">发到群里</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
         const convId = {{ conv.id }};
@@ -104,6 +129,11 @@
         function esc(s) {
             const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
         }
+        // 把文本里的网址变成可点击的链接（先转义防注入，再替换 URL）
+        function linkify(s) {
+            return esc(s).replace(/(https?:\/\/[^\s]+)/g,
+                '<a href="$1" target="_blank" style="color:inherit;text-decoration:underline;">$1</a>');
+        }
         function addMsg(m) {
             const div = document.createElement('div');
             div.className = 'msg' + (m.mine ? ' mine' : '');
@@ -113,7 +143,7 @@
                 html += '<a href="' + m.image_url + '" target="_blank">' +
                         '<img src="' + m.image_url + '" style="max-width:200px;max-height:240px;border-radius:10px;object-fit:cover;"></a>';
             } else {
-                html += '<div class="bubble">' + esc(m.content) + '</div>';
+                html += '<div class="bubble">' + linkify(m.content) + '</div>';
             }
             html += '<div class="time">' + m.time + '</div>';
             div.innerHTML = html;
@@ -149,6 +179,38 @@
                 else { alert(data.error || '发送失败'); }
             } catch (err) { console.error(err); }
             e.target.value = '';  // 清空，允许再选同一张
+        });
+
+        // 会议弹框
+        const meetingModal = document.getElementById('meetingModal');
+        document.getElementById('meetingBtn').addEventListener('click', () => {
+            meetingModal.style.display = 'flex';
+            document.getElementById('meetingInput').focus();
+        });
+        document.getElementById('meetingCancel').addEventListener('click', () => {
+            meetingModal.style.display = 'none';
+        });
+        // 点遮罩空白处关闭
+        meetingModal.addEventListener('click', (e) => {
+            if (e.target === meetingModal) meetingModal.style.display = 'none';
+        });
+        // 发送会议邀请到群
+        document.getElementById('meetingSend').addEventListener('click', async () => {
+            const v = document.getElementById('meetingInput').value.trim();
+            if (!v) { alert('请先粘贴会议号或链接'); return; }
+            // 组装一条会议邀请消息
+            const text = '📹 我发起了腾讯会议，点击或复制加入：\n' + v;
+            const fd = new FormData();
+            fd.append('content', text);
+            try {
+                const r = await fetch('/chat/' + convId + '/send', { method: 'POST', body: fd });
+                const data = await r.json();
+                if (data.ok) {
+                    meetingModal.style.display = 'none';
+                    document.getElementById('meetingInput').value = '';
+                    await poll();
+                } else { alert(data.error || '发送失败'); }
+            } catch (err) { console.error(err); }
         });
 
         // 轮询拉新消息
