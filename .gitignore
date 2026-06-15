@@ -9,9 +9,13 @@ instance/
 uploads/
 static/uploads/
 
-# 密钥 / 环境变量文件
+# 密钥 / 环境变量文件 —— 绝对不能泄露！
 .env
 *.env
+*.pem
+*.ppk
+*.key
+xingmen.pem
 
 # Python 缓存
 __pycache__/

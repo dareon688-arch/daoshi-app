@@ -475,6 +475,37 @@ def _is_member(conv, user):
     return Membership.query.filter_by(conversation_id=conv.id, user_id=user.id).first() is not None
 
 
+def _unread_count(conv, user):
+    """某用户在某会话里的未读消息数：
+    比 last_read_at 晚、且不是自己发的消息。"""
+    mem = Membership.query.filter_by(conversation_id=conv.id, user_id=user.id).first()
+    if not mem:
+        return 0
+    return (Message.query
+            .filter(Message.conversation_id == conv.id,
+                    Message.sender_id != user.id,
+                    Message.created_at > (mem.last_read_at or datetime.min))
+            .count())
+
+
+def _total_unread(user):
+    """某用户所有会话的未读总数（用于导航栏红点）。"""
+    convs = (Conversation.query.join(Membership)
+             .filter(Membership.user_id == user.id).all())
+    return sum(_unread_count(c, user) for c in convs)
+
+
+# 让所有模板都能拿到当前用户的未读总数（导航栏红点用）
+@app.context_processor
+def inject_unread():
+    if current_user.is_authenticated:
+        try:
+            return {"unread_total": _total_unread(current_user)}
+        except Exception:
+            return {"unread_total": 0}
+    return {"unread_total": 0}
+
+
 # ── 聊天首页：我的会话列表 ──
 @app.route("/chat")
 @login_required
@@ -489,6 +520,7 @@ def chat():
             "conv": c,
             "title": c.title_for(current_user),
             "last": last,
+            "unread": _unread_count(c, current_user),
         })
     # 可选私聊对象：除自己外的所有成员
     others = User.query.filter(User.id != current_user.id).all()
@@ -575,8 +607,14 @@ def conversation(conv_id):
         mem.last_read_at = datetime.utcnow()
         db.session.commit()
 
+    # 私聊时，找出对方（点头像看资料用）
+    other = None
+    if not conv.is_group:
+        others = [m.user for m in conv.memberships if m.user_id != current_user.id]
+        other = others[0] if others else None
+
     return render_template("conversation.html", conv=conv, msgs=msgs,
-                           title=conv.title_for(current_user))
+                           title=conv.title_for(current_user), other=other)
 
 
 # ── 发消息 ──

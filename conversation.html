@@ -47,21 +47,8 @@
 <body>
     <div class="chat-header">
         <a href="{{ url_for('chat') }}" class="btn btn-sm btn-bamboo">‹</a>
-        <span class="brush flex-grow-1" style="font-size:18px;">{{ title }}</span>
-        {% if conv.is_group %}
-            <span class="small me-1" style="color:var(--muted);">{{ conv.memberships|length }}人</span>
-        {% elif other %}
-            <!-- 私聊：右上角对方头像，点击看详细资料（像微信） -->
-            <a href="{{ url_for('member_detail', user_id=other.id) }}" style="text-decoration:none;">
-                {% if other.photo %}
-                    <img src="{{ url_for('uploaded_file', filename=other.photo) }}"
-                         class="rounded-circle" width="36" height="36" style="object-fit:cover;">
-                {% else %}
-                    <span class="rounded-circle d-inline-flex align-items-center justify-content-center"
-                          style="width:36px;height:36px; background:var(--bamboo); color:#fff;">{{ other.name[0] }}</span>
-                {% endif %}
-            </a>
-        {% endif %}
+        <span class="brush" style="font-size:18px;">{{ title }}</span>
+        {% if conv.is_group %}<span class="small" style="color:var(--muted);">· {{ conv.memberships|length }}人</span>{% endif %}
     </div>
 
     <div class="chat-body" id="chatBody">

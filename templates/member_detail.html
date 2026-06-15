@@ -67,12 +67,16 @@
                 {% endif %}
             </ul>
 
-            <!-- 如果看的是自己，显示编辑按钮 -->
-            {% if user.id == current_user.id %}
+            <!-- 看自己=编辑按钮；看别人=发消息按钮 -->
             <div class="p-3">
+            {% if user.id == current_user.id %}
                 <a href="{{ url_for('edit_profile') }}" class="btn btn-ink w-100">编辑我的信息</a>
-            </div>
+            {% else %}
+                <form method="POST" action="{{ url_for('open_private', user_id=user.id) }}" class="m-0">
+                    <button type="submit" class="btn btn-ink w-100">发消息</button>
+                </form>
             {% endif %}
+            </div>
         </div>
 
         <p class="text-center small mt-4 mb-0" style="color:var(--muted);">师门如家 · 内部使用</p>

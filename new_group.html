@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>建群 · 老邢和他的学生们</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='guofeng.css') }}" rel="stylesheet">
+    {% include '_pwa_head.html' %}
+</head>
+<body>
+    <div class="container py-4" style="max-width: 560px;">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="{{ url_for('chat') }}" class="btn btn-sm btn-bamboo">‹ 返回</a>
+            <h1 class="brush m-0" style="font-size:22px;">建群</h1>
+            <span style="width:48px;"></span>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for msg in messages %}
+              <div class="alert alert-warning py-2">{{ msg }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" class="gf-card">
+            <div class="p-3">
+                <div class="mb-3">
+                    <label class="form-label">群名</label>
+                    <input type="text" name="name" class="form-control" required autofocus
+                           placeholder="如：2023级讨论组" maxlength="80">
+                </div>
+
+                <label class="form-label">选择成员（可多选）</label>
+                <div class="mb-3" style="max-height:300px; overflow-y:auto; border:1px solid var(--border-soft); border-radius:8px; padding:8px;">
+                    {% for u in others %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="members"
+                               value="{{ u.id }}" id="m{{ u.id }}">
+                        <label class="form-check-label" for="m{{ u.id }}">
+                            {{ u.name }}
+                            {% if u.enroll_year %}<span class="small" style="color:var(--muted);">· {{ u.enroll_year }}级</span>{% endif %}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <button type="submit" class="btn btn-ink w-100">创建群聊</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
