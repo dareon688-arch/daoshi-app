@@ -508,6 +508,13 @@ def inject_unread():
     return {"unread_total": 0}
 
 
+# ── 会议引导页：一键打开腾讯会议 ──
+@app.route("/meeting")
+@login_required
+def meeting():
+    return render_template("meeting.html")
+
+
 # ── 聊天首页：我的会话列表 ──
 @app.route("/chat")
 @login_required

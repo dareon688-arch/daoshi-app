@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>会议 · 老邢和他的学生们</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='guofeng.css') }}" rel="stylesheet">
+    {% include '_pwa_head.html' %}
+</head>
+<body>
+    <div class="container py-4" style="max-width: 480px;">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="{{ url_for('chat') }}" class="btn btn-sm btn-bamboo">‹ 返回</a>
+            <h1 class="brush m-0" style="font-size:22px;">师门会议</h1>
+            <span style="width:48px;"></span>
+        </div>
+
+        <div class="gf-card mb-3">
+            <div class="p-4 text-center">
+                <div class="brush mb-2" style="font-size:20px;">线上开会</div>
+                <p class="small mb-4" style="color:var(--muted);">
+                    点下面的按钮打开腾讯会议，发起或加入会议，<br>
+                    再把会议号发到群里，大家就能一起开会了。
+                </p>
+
+                <!-- 发起会议：拉起腾讯会议 App，拉不起就去网页 -->
+                <a id="startBtn" href="https://meeting.tencent.com/" target="_blank"
+                   class="btn btn-ink w-100 mb-2" style="height:46px; line-height:30px;">
+                    发起 / 加入腾讯会议
+                </a>
+
+                <a href="https://meeting.tencent.com/download/" target="_blank"
+                   class="btn btn-bamboo w-100" style="height:42px; line-height:26px;">
+                    还没装？下载腾讯会议
+                </a>
+            </div>
+        </div>
+
+        <div class="gf-card">
+            <div class="p-3">
+                <div class="fw-semibold mb-2">怎么用</div>
+                <ol class="small mb-0" style="color:var(--muted); padding-left:18px;">
+                    <li class="mb-1">点「发起 / 加入腾讯会议」</li>
+                    <li class="mb-1">在腾讯会议里点「快速会议」发起会议</li>
+                    <li class="mb-1">复制会议号，回到「消息」发到群里</li>
+                    <li>同门点会议号即可加入</li>
+                </ol>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // 在手机上优先尝试拉起腾讯会议 App，失败再退回网页（网页是 href 默认行为）
+        document.getElementById('startBtn').addEventListener('click', function (e) {
+            var ua = navigator.userAgent;
+            var isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+            if (isMobile) {
+                // 尝试用腾讯会议的 App scheme 唤起（唤起失败时浏览器仍会走 href 打开网页）
+                var t = setTimeout(function () { /* 唤起失败则什么都不做，href 已打开网页 */ }, 1500);
+                try { window.location.href = 'wemeet://'; } catch (err) {}
+            }
+            // 桌面端：直接走 href 打开网页，无需拦截
+        });
+    </script>
+</body>
+</html>

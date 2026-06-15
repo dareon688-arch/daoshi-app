@@ -13,7 +13,10 @@
 
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h1 class="brush m-0" style="font-size:22px;">消息</h1>
-            <a href="{{ url_for('new_group') }}" class="btn btn-sm btn-ink">+ 建群</a>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('meeting') }}" class="btn btn-sm btn-bamboo">会议</a>
+                <a href="{{ url_for('new_group') }}" class="btn btn-sm btn-ink">+ 建群</a>
+            </div>
         </div>
 
         {% with messages = get_flashed_messages() %}
