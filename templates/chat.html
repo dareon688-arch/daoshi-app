@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消息 · 老邢和他的学生们</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='guofeng.css') }}" rel="stylesheet">
+    {% include '_pwa_head.html' %}
+</head>
+<body>
+    <div class="container py-4" style="max-width: 560px;">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="{{ url_for('members') }}" class="btn btn-sm btn-bamboo">‹ 成员</a>
+            <h1 class="brush m-0" style="font-size:22px;">消息</h1>
+            <a href="{{ url_for('new_group') }}" class="btn btn-sm btn-ink">建群</a>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for msg in messages %}
+              <div class="alert alert-success py-2">{{ msg }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <!-- 会话列表 -->
+        {% if not items %}
+            <p class="text-center py-4" style="color:var(--muted);">还没有会话，从下面找人开始聊吧</p>
+        {% endif %}
+
+        {% for it in items %}
+        <a href="{{ url_for('conversation', conv_id=it.conv.id) }}"
+           class="gf-card d-block mb-2 text-decoration-none" style="color:var(--ink);">
+            <div class="d-flex align-items-center p-2">
+                <div class="rounded-circle me-3 d-flex align-items-center justify-content-center"
+                     style="width:46px;height:46px; background:{{ '#8a6d3b' if it.conv.is_group else 'var(--bamboo)' }}; color:#fff;">
+                    {{ '群' if it.conv.is_group else it.title[0] }}
+                </div>
+                <div class="flex-grow-1" style="min-width:0;">
+                    <div class="fw-semibold">{{ it.title }}</div>
+                    <div class="small text-truncate" style="color:var(--muted);">
+                        {% if it.last %}
+                            {% if it.conv.is_group %}{{ it.last.sender.name }}：{% endif %}{{ it.last.content }}
+                        {% else %}还没有消息{% endif %}
+                    </div>
+                </div>
+                {% if it.last %}
+                <span class="small ms-2" style="color:var(--muted);">{{ it.last.created_at.strftime('%H:%M') }}</span>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
+
+        <!-- 找人私聊 -->
+        <div class="mt-4">
+            <div class="brush mb-2" style="font-size:18px;">找人私聊</div>
+            <div class="d-flex flex-wrap gap-2">
+                {% for u in others %}
+                <form method="POST" action="{{ url_for('open_private', user_id=u.id) }}" class="m-0">
+                    <button class="btn btn-sm btn-bamboo">{{ u.name }}</button>
+                </form>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

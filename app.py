@@ -124,6 +124,60 @@ class Announcement(db.Model):
     author = db.relationship("User")
 
 
+# ──────────────────────────────────────────────────────────────
+# 聊天相关：会话 / 会话成员 / 消息（私聊=2人会话，群聊=多人会话）
+# ──────────────────────────────────────────────────────────────
+
+# ── 会话表：一个聊天窗口（一个私聊或一个群） ──
+class Conversation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    is_group = db.Column(db.Boolean, default=False)          # True=群聊，False=私聊
+    name = db.Column(db.String(80), nullable=True)           # 群名（群聊才有）
+    creator_id = db.Column(db.Integer, db.ForeignKey("user.id"))  # 谁建的
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # 这个会话里的成员（通过 Membership 关联）
+    memberships = db.relationship("Membership", back_populates="conversation",
+                                  cascade="all, delete-orphan")
+    messages = db.relationship("Message", back_populates="conversation",
+                               cascade="all, delete-orphan")
+
+    def members(self):
+        """返回这个会话里的所有用户对象。"""
+        return [m.user for m in self.memberships]
+
+    def title_for(self, viewer):
+        """给某个查看者显示的会话标题：
+        群聊显示群名；私聊显示“对方的名字”。"""
+        if self.is_group:
+            return self.name or "群聊"
+        others = [m.user for m in self.memberships if m.user_id != viewer.id]
+        return others[0].name if others else "（空会话）"
+
+
+# ── 会话成员表：谁在哪个会话里 ──
+class Membership(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id"))
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    last_read_at = db.Column(db.DateTime, default=datetime.utcnow)  # 读到哪了（算未读用）
+
+    conversation = db.relationship("Conversation", back_populates="memberships")
+    user = db.relationship("User")
+
+
+# ── 消息表：每条聊天消息 = 一行 ──
+class Message(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id"))
+    sender_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    conversation = db.relationship("Conversation", back_populates="messages")
+    sender = db.relationship("User")
+
+
 # Flask-Login 需要这个函数，用来根据 id 找回用户
 @login_manager.user_loader
 def load_user(user_id):
@@ -397,6 +451,173 @@ def delete_announcement(item_id):
     db.session.commit()
     flash("公告已删除")
     return redirect(url_for("announcements"))
+
+
+# ──────────────────────────────────────────────────────────────
+# 聊天功能（阶段一：私聊 + 建群 + 轮询拉消息）
+# ──────────────────────────────────────────────────────────────
+
+def _my_conversations():
+    """当前用户所在的所有会话，按最近有消息的排在前面。"""
+    convs = (Conversation.query
+             .join(Membership)
+             .filter(Membership.user_id == current_user.id)
+             .all())
+    # 按最后一条消息时间倒序（没消息的用创建时间）
+    def last_time(c):
+        last = (Message.query.filter_by(conversation_id=c.id)
+                .order_by(Message.created_at.desc()).first())
+        return last.created_at if last else c.created_at
+    return sorted(convs, key=last_time, reverse=True)
+
+
+def _is_member(conv, user):
+    return Membership.query.filter_by(conversation_id=conv.id, user_id=user.id).first() is not None
+
+
+# ── 聊天首页：我的会话列表 ──
+@app.route("/chat")
+@login_required
+def chat():
+    convs = _my_conversations()
+    # 给每个会话准备：标题、最后一条消息预览
+    items = []
+    for c in convs:
+        last = (Message.query.filter_by(conversation_id=c.id)
+                .order_by(Message.created_at.desc()).first())
+        items.append({
+            "conv": c,
+            "title": c.title_for(current_user),
+            "last": last,
+        })
+    # 可选私聊对象：除自己外的所有成员
+    others = User.query.filter(User.id != current_user.id).all()
+    return render_template("chat.html", items=items, others=others)
+
+
+# ── 开始（或打开）和某人的私聊 ──
+@app.route("/chat/private/<int:user_id>", methods=["POST"])
+@login_required
+def open_private(user_id):
+    other = db.get_or_404(User, user_id)
+    if other.id == current_user.id:
+        flash("不能和自己私聊")
+        return redirect(url_for("chat"))
+
+    # 找有没有已存在的、只含这两人的私聊会话
+    my_convs = (Conversation.query.join(Membership)
+                .filter(Membership.user_id == current_user.id,
+                        Conversation.is_group == False).all())
+    existing = None
+    for c in my_convs:
+        member_ids = {m.user_id for m in c.memberships}
+        if member_ids == {current_user.id, other.id}:
+            existing = c
+            break
+
+    if existing:
+        return redirect(url_for("conversation", conv_id=existing.id))
+
+    # 没有就新建一个私聊会话
+    conv = Conversation(is_group=False, creator_id=current_user.id)
+    db.session.add(conv)
+    db.session.flush()
+    db.session.add(Membership(conversation_id=conv.id, user_id=current_user.id))
+    db.session.add(Membership(conversation_id=conv.id, user_id=other.id))
+    db.session.commit()
+    return redirect(url_for("conversation", conv_id=conv.id))
+
+
+# ── 建群：选若干成员 ──
+@app.route("/chat/new-group", methods=["GET", "POST"])
+@login_required
+def new_group():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        member_ids = request.form.getlist("members")  # 选中的成员 id 列表
+        if not name:
+            flash("请填群名")
+            return redirect(url_for("new_group"))
+        if not member_ids:
+            flash("至少选一个成员")
+            return redirect(url_for("new_group"))
+
+        conv = Conversation(is_group=True, name=name, creator_id=current_user.id)
+        db.session.add(conv)
+        db.session.flush()
+        # 建群者自己一定在群里
+        ids = set(int(i) for i in member_ids) | {current_user.id}
+        for uid in ids:
+            db.session.add(Membership(conversation_id=conv.id, user_id=uid))
+        db.session.commit()
+        flash("群聊已创建 🎉")
+        return redirect(url_for("conversation", conv_id=conv.id))
+
+    others = User.query.filter(User.id != current_user.id).all()
+    return render_template("new_group.html", others=others)
+
+
+# ── 打开某个会话，看消息 ──
+@app.route("/chat/<int:conv_id>")
+@login_required
+def conversation(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not _is_member(conv, current_user):
+        flash("你不在这个会话里")
+        return redirect(url_for("chat"))
+
+    msgs = (Message.query.filter_by(conversation_id=conv.id)
+            .order_by(Message.created_at.asc()).all())
+
+    # 更新“读到哪了”
+    mem = Membership.query.filter_by(conversation_id=conv.id, user_id=current_user.id).first()
+    if mem:
+        mem.last_read_at = datetime.utcnow()
+        db.session.commit()
+
+    return render_template("conversation.html", conv=conv, msgs=msgs,
+                           title=conv.title_for(current_user))
+
+
+# ── 发消息 ──
+@app.route("/chat/<int:conv_id>/send", methods=["POST"])
+@login_required
+def send_message(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not _is_member(conv, current_user):
+        return {"ok": False, "error": "你不在这个会话里"}, 403
+    content = (request.form.get("content") or "").strip()
+    if not content:
+        return {"ok": False, "error": "消息不能为空"}, 400
+
+    msg = Message(conversation_id=conv.id, sender_id=current_user.id, content=content)
+    db.session.add(msg)
+    db.session.commit()
+    return {"ok": True, "id": msg.id}
+
+
+# ── 轮询：拉取某会话里 id 大于 after 的新消息（前端每隔几秒调一次） ──
+@app.route("/chat/<int:conv_id>/poll")
+@login_required
+def poll_messages(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not _is_member(conv, current_user):
+        return {"ok": False}, 403
+    after = request.args.get("after", 0, type=int)
+    msgs = (Message.query
+            .filter(Message.conversation_id == conv.id, Message.id > after)
+            .order_by(Message.created_at.asc()).all())
+    return {
+        "ok": True,
+        "messages": [{
+            "id": m.id,
+            "sender_id": m.sender_id,
+            "sender_name": m.sender.name if m.sender else "?",
+            "content": m.content,
+            "time": m.created_at.strftime("%H:%M"),
+            "mine": m.sender_id == current_user.id,
+        } for m in msgs],
+    }
 
 
 # ──────────────────────────────────────────────────────────────
