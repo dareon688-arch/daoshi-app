@@ -15,11 +15,11 @@
        align-items:center; justify-content:center; text-decoration:none; position:relative;
        color:{{ 'var(--bamboo-dark)' if active == key else 'var(--muted)' }};
        {% if active == key %}font-weight:500;{% endif %}">
-        <span style="font-size:13px;">{{ label }}</span>
+        <span style="font-size:16px; letter-spacing:1px;">{{ label }}</span>
         {% if key == 'chat' and unread_total and unread_total > 0 %}
-        <span style="position:absolute; top:8px; left:calc(50% + 10px);
-              background:var(--seal-red); color:#fff; font-size:10px; line-height:1;
-              min-width:16px; height:16px; border-radius:8px; padding:0 4px;
+        <span style="position:absolute; top:6px; left:calc(50% + 12px);
+              background:var(--seal-red); color:#fff; font-size:11px; line-height:1;
+              min-width:18px; height:18px; border-radius:9px; padding:0 5px;
               display:flex; align-items:center; justify-content:center;">
             {{ unread_total if unread_total < 100 else '99+' }}
         </span>
