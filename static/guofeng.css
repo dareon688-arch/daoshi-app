@@ -1,0 +1,89 @@
+/* guofeng.css —— 全站国风主题样式
+   配色：宣纸暖白 + 墨黑 + 朱砂红印章 + 鼠尾草绿点缀
+   字体：标题用书法体(Ma Shan Zheng)，正文用楷体系统字回退 */
+
+:root {
+    --xuan-paper:   #f6f2e7;   /* 宣纸底色 */
+    --xuan-paper-2: #f3efe4;   /* 页面更外层底色 */
+    --ink:          #1a1a1a;   /* 墨黑 */
+    --ink-soft:     #3a3a3a;   /* 浅墨 */
+    --seal-red:     #b1322f;   /* 朱砂印章红 */
+    --bamboo:       #5f7d5a;   /* 竹青绿（点缀/主色） */
+    --bamboo-dark:  #46603f;
+    --border-soft:  #e0d9c6;   /* 柔和边框 */
+    --card-bg:      #fffdf6;   /* 卡片纸白 */
+    --muted:        #9a917c;   /* 淡墨注释 */
+}
+
+/* 书法标题字体 */
+@import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap');
+
+body {
+    background: var(--xuan-paper-2);
+    color: var(--ink);
+    /* 正文：优先系统楷体，营造国风又保证清晰可读 */
+    font-family: "Kaiti SC", "STKaiti", "KaiTi", "楷体",
+                 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* 书法标题类：用在 App 名、大标题上 */
+.brush {
+    font-family: "Ma Shan Zheng", "Kaiti SC", "STKaiti", "KaiTi", serif;
+    color: var(--ink);
+    letter-spacing: 2px;
+}
+
+/* 国风卡片 */
+.gf-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 14px;
+    box-shadow: 0 4px 18px rgba(95, 125, 90, .08);
+}
+
+/* 主按钮：墨黑 */
+.btn-ink {
+    background: var(--ink);
+    color: var(--xuan-paper);
+    border: none;
+    border-radius: 9px;
+    letter-spacing: 2px;
+}
+.btn-ink:hover { background: #000; color: #fff; }
+
+/* 次按钮：竹青描边 */
+.btn-bamboo {
+    background: transparent;
+    color: var(--bamboo-dark);
+    border: 1px solid var(--bamboo);
+    border-radius: 9px;
+}
+.btn-bamboo:hover { background: var(--bamboo); color: #fff; }
+
+/* 朱砂印章 */
+.seal {
+    background: var(--seal-red);
+    color: #fff;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.1;
+    opacity: .85;
+    font-family: "Kaiti SC", "STKaiti", "KaiTi", serif;
+}
+
+/* 顶部小标题/副标题 */
+.gf-subtitle { color: var(--muted); letter-spacing: 3px; }
+
+/* 让输入框也带点国风纸感 */
+.form-control {
+    background: #fbf9f2;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+}
+.form-control:focus {
+    border-color: var(--bamboo);
+    box-shadow: 0 0 0 .15rem rgba(95, 125, 90, .15);
+}

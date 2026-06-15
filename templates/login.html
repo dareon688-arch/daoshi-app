@@ -3,38 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 · 导师组</title>
+    <title>登录 · 老邢和他的学生们</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='guofeng.css') }}" rel="stylesheet">
     {% include '_pwa_head.html' %}
+    <style>
+        .login-stage {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .scroll {
+            width: 100%;
+            max-width: 330px;
+            background: var(--xuan-paper);
+            border-radius: 14px;
+            padding: 30px 0 26px;
+            box-shadow: 0 8px 30px rgba(0,0,0,.08);
+            overflow: hidden;
+        }
+        /* 竖排书法区 */
+        .calli {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 8px;
+            height: 320px;
+            color: var(--ink);
+        }
+        .calli .col { display: flex; flex-direction: column; align-items: center; }
+        .col-left  { line-height: 1; }
+        .col-right { line-height: 1.2; margin-top: 78px; }
+        .login-box { margin: 8px 26px 0; border-top: 1px solid var(--border-soft); padding-top: 18px; }
+    </style>
 </head>
-<body class="bg-light">
-    <div class="container py-5" style="max-width: 400px;">
-        <h1 class="h4 text-center mb-4">登录</h1>
+<body>
+    <div class="login-stage">
+        <div class="scroll">
 
-        <!-- flash 是后端传来的提示消息（比如“密码错误”） -->
-        {% with messages = get_flashed_messages() %}
-          {% if messages %}
-            {% for msg in messages %}
-              <div class="alert alert-warning py-2">{{ msg }}</div>
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-
-        <form method="POST" class="card shadow-sm">
-            <div class="card-body">
-                <div class="mb-3">
-                    <label class="form-label">用户名</label>
-                    <input type="text" name="username" class="form-control" required autofocus>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">密码</label>
-                    <input type="password" name="password" class="form-control" required>
-                </div>
-                <button type="submit" class="btn btn-primary w-100">登录</button>
+            <!-- 顶部：师门如家 / 欢迎回家 -->
+            <div class="text-center mb-1">
+                <div class="brush" style="font-size:18px; letter-spacing:6px;">师门如家</div>
+                <div class="gf-subtitle" style="font-size:12px; margin-top:6px;">欢迎回家</div>
             </div>
-        </form>
 
-        <p class="text-center text-muted small mt-4">导师组 · 内部使用</p>
+            <!-- 竖排书法：老邢和 / 他的学生们 / 印章 -->
+            <div class="calli brush">
+                <div class="col col-left">
+                    <span style="font-size:36px; margin-top:34px;">老</span>
+                    <span style="font-size:104px; margin:4px 0;">邢</span>
+                    <span style="font-size:32px;">和</span>
+                </div>
+                <div class="col col-right">
+                    <span style="font-size:42px;">他</span>
+                    <span style="font-size:36px;">的</span>
+                    <span style="font-size:44px;">学</span>
+                    <span style="font-size:40px;">生</span>
+                    <span style="font-size:38px;">们</span>
+                </div>
+                <div style="align-self:flex-end; margin-bottom:20px;">
+                    <span class="seal" style="width:30px; height:30px; font-size:11px;">邢门</span>
+                </div>
+            </div>
+
+            <!-- 底部：登录表单（占比小、低调） -->
+            <div class="login-box">
+                {% with messages = get_flashed_messages() %}
+                  {% if messages %}
+                    {% for msg in messages %}
+                      <div class="alert alert-warning py-2 small">{{ msg }}</div>
+                    {% endfor %}
+                  {% endif %}
+                {% endwith %}
+
+                <form method="POST">
+                    <input type="text" name="username" class="form-control form-control-sm mb-2"
+                           placeholder="用户名" required autofocus
+                           style="height:38px;">
+                    <input type="password" name="password" class="form-control form-control-sm mb-3"
+                           placeholder="密码" required
+                           style="height:38px;">
+                    <button type="submit" class="btn btn-ink w-100" style="height:40px;">登 录</button>
+                </form>
+            </div>
+
+        </div>
     </div>
 </body>
 </html>
