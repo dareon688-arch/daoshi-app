@@ -9,7 +9,7 @@
 
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from flask import (
     Flask, render_template, request, redirect, url_for, flash,
     send_from_directory,
@@ -122,6 +122,43 @@ class Announcement(db.Model):
     pinned = db.Column(db.Boolean, default=False)            # 是否置顶（管理员设置）
 
     author = db.relationship("User")
+
+
+# ── 活动日历：一条 = 一个（未来）活动安排 ──
+class CalendarEvent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)       # 活动标题
+    event_date = db.Column(db.Date, nullable=False)         # 活动日期
+    location = db.Column(db.String(100), nullable=True)     # 地点（选填）
+    note = db.Column(db.Text, nullable=True)                # 说明（选填）
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# ── 活动足迹：一条 = 一次办过的活动（图文档案） ──
+class Activity(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)       # 活动标题
+    content = db.Column(db.Text, nullable=True)             # 文案/记述
+    cover = db.Column(db.String(200), nullable=True)        # 封面图文件名
+    happened_on = db.Column(db.Date, nullable=True)         # 活动发生日期（选填）
+    author_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    author = db.relationship("User")
+    photos = db.relationship("ActivityPhoto", back_populates="activity",
+                             cascade="all, delete-orphan")
+
+
+# ── 活动足迹照片：成员往某则活动里上传的照片（谁传谁删，管理员删任意） ──
+class ActivityPhoto(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("activity.id"))
+    filename = db.Column(db.String(200), nullable=False)
+    uploader_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    activity = db.relationship("Activity", back_populates="photos")
+    uploader = db.relationship("User")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -453,6 +490,171 @@ def delete_announcement(item_id):
     db.session.commit()
     flash("公告已删除")
     return redirect(url_for("announcements"))
+
+
+# ──────────────────────────────────────────────────────────────
+# 活动日历：看未来活动（所有人）；管理员可增删改
+# ──────────────────────────────────────────────────────────────
+@app.route("/calendar")
+@login_required
+def calendar():
+    # 按日期升序，今天及以后的在前；过去的也列出但靠后
+    today = date.today()
+    upcoming = (CalendarEvent.query.filter(CalendarEvent.event_date >= today)
+                .order_by(CalendarEvent.event_date.asc()).all())
+    past = (CalendarEvent.query.filter(CalendarEvent.event_date < today)
+            .order_by(CalendarEvent.event_date.desc()).all())
+    return render_template("calendar.html", upcoming=upcoming, past=past, today=today)
+
+
+@app.route("/calendar/new", methods=["GET", "POST"])
+@login_required
+def new_event():
+    if not current_user.is_admin:
+        flash("只有管理员能添加活动")
+        return redirect(url_for("calendar"))
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        date_str = request.form.get("event_date", "").strip()
+        location = request.form.get("location", "").strip()
+        note = request.form.get("note", "").strip()
+        if not title or not date_str:
+            flash("标题和日期必填")
+            return render_template("new_event.html")
+        try:
+            ev_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            flash("日期格式不对")
+            return render_template("new_event.html")
+        ev = CalendarEvent(title=title, event_date=ev_date,
+                           location=location or None, note=note or None)
+        db.session.add(ev)
+        db.session.commit()
+        flash("活动已添加 ✅")
+        return redirect(url_for("calendar"))
+    return render_template("new_event.html")
+
+
+@app.route("/calendar/delete/<int:event_id>", methods=["POST"])
+@login_required
+def delete_event(event_id):
+    if not current_user.is_admin:
+        flash("只有管理员能删除活动")
+        return redirect(url_for("calendar"))
+    ev = db.get_or_404(CalendarEvent, event_id)
+    db.session.delete(ev)
+    db.session.commit()
+    flash("活动已删除")
+    return redirect(url_for("calendar"))
+
+
+# ──────────────────────────────────────────────────────────────
+# 活动足迹：办过的活动图文档案；管理员发布，成员可往里补照片
+# ──────────────────────────────────────────────────────────────
+@app.route("/footprint")
+@login_required
+def footprint():
+    items = Activity.query.order_by(Activity.created_at.desc()).all()
+    return render_template("footprint.html", items=items)
+
+
+@app.route("/footprint/new", methods=["GET", "POST"])
+@login_required
+def new_activity():
+    if not current_user.is_admin:
+        flash("只有管理员能发布活动足迹")
+        return redirect(url_for("footprint"))
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        content = request.form.get("content", "").strip()
+        date_str = request.form.get("happened_on", "").strip()
+        if not title:
+            flash("标题必填")
+            return render_template("new_activity.html")
+        happened = None
+        if date_str:
+            try:
+                happened = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except ValueError:
+                happened = None
+        # 封面图（选填）
+        cover_name = None
+        file = request.files.get("cover")
+        if file and file.filename and allowed_file(file.filename):
+            ext = file.filename.rsplit(".", 1)[1].lower()
+            cover_name = f"{uuid.uuid4().hex}.{ext}"
+            file.save(os.path.join(app.config["UPLOAD_FOLDER"], cover_name))
+        act = Activity(title=title, content=content or None, cover=cover_name,
+                       happened_on=happened, author_id=current_user.id)
+        db.session.add(act)
+        db.session.commit()
+        flash("活动足迹已发布 🎉")
+        return redirect(url_for("activity_detail", activity_id=act.id))
+    return render_template("new_activity.html")
+
+
+@app.route("/footprint/<int:activity_id>")
+@login_required
+def activity_detail(activity_id):
+    act = db.get_or_404(Activity, activity_id)
+    photos = (ActivityPhoto.query.filter_by(activity_id=act.id)
+              .order_by(ActivityPhoto.created_at.asc()).all())
+    return render_template("activity_detail.html", act=act, photos=photos)
+
+
+@app.route("/footprint/<int:activity_id>/add-photo", methods=["POST"])
+@login_required
+def add_activity_photo(activity_id):
+    # 所有成员都能往活动里补照片
+    act = db.get_or_404(Activity, activity_id)
+    file = request.files.get("photo")
+    if not file or not file.filename:
+        flash("请选择照片")
+        return redirect(url_for("activity_detail", activity_id=act.id))
+    if not allowed_file(file.filename):
+        flash("照片格式不支持")
+        return redirect(url_for("activity_detail", activity_id=act.id))
+    ext = file.filename.rsplit(".", 1)[1].lower()
+    fname = f"{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(app.config["UPLOAD_FOLDER"], fname))
+    photo = ActivityPhoto(activity_id=act.id, filename=fname, uploader_id=current_user.id)
+    db.session.add(photo)
+    db.session.commit()
+    flash("照片已添加 ✅")
+    return redirect(url_for("activity_detail", activity_id=act.id))
+
+
+@app.route("/footprint/photo/<int:photo_id>/delete", methods=["POST"])
+@login_required
+def delete_activity_photo(photo_id):
+    photo = db.get_or_404(ActivityPhoto, photo_id)
+    aid = photo.activity_id
+    # 谁传谁能删，管理员能删任意
+    if photo.uploader_id != current_user.id and not current_user.is_admin:
+        flash("你没有权限删除这张照片")
+        return redirect(url_for("activity_detail", activity_id=aid))
+    filename = photo.filename
+    db.session.delete(photo)
+    db.session.commit()
+    try:
+        os.remove(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+    except OSError:
+        pass
+    flash("照片已删除")
+    return redirect(url_for("activity_detail", activity_id=aid))
+
+
+@app.route("/footprint/<int:activity_id>/delete", methods=["POST"])
+@login_required
+def delete_activity(activity_id):
+    if not current_user.is_admin:
+        flash("只有管理员能删除活动足迹")
+        return redirect(url_for("footprint"))
+    act = db.get_or_404(Activity, activity_id)
+    db.session.delete(act)   # 关联照片记录会级联删除
+    db.session.commit()
+    flash("活动足迹已删除")
+    return redirect(url_for("footprint"))
 
 
 # ──────────────────────────────────────────────────────────────

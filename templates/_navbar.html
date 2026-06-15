@@ -1,23 +1,24 @@
 {# 底部导航栏（微信式 tab）。各页面 body 末尾 include 本文件并先 set active。
-   active 取值 chat/members/announce/album；unread_total 由后端 context_processor 注入。 #}
+   active 取值 chat/members/announce/calendar/footprint；unread_total 由后端注入。 #}
 <div style="height:64px;"></div>  <!-- 占位，避免内容被固定导航遮住 -->
 <nav style="position:fixed; bottom:0; left:0; right:0; z-index:1000;
             background:var(--xuan-paper); border-top:1px solid var(--border-soft);
             display:flex; height:60px;">
     {% set tabs = [
-        ('chat',     url_for('chat'),          '消息'),
-        ('members',  url_for('members'),       '同门'),
-        ('announce', url_for('announcements'), '公告'),
-        ('album',    url_for('album'),         '相册')
+        ('chat',      url_for('chat'),          '消息'),
+        ('members',   url_for('members'),       '同门'),
+        ('announce',  url_for('announcements'), '公告'),
+        ('calendar',  url_for('calendar'),      '日历'),
+        ('footprint', url_for('footprint'),     '足迹')
     ] %}
     {% for key, href, label in tabs %}
     <a href="{{ href }}" style="flex:1; display:flex; flex-direction:column;
        align-items:center; justify-content:center; text-decoration:none; position:relative;
        color:{{ 'var(--bamboo-dark)' if active == key else 'var(--muted)' }};
        {% if active == key %}font-weight:500;{% endif %}">
-        <span style="font-size:16px; letter-spacing:1px;">{{ label }}</span>
+        <span style="font-size:15px; letter-spacing:1px;">{{ label }}</span>
         {% if key == 'chat' and unread_total and unread_total > 0 %}
-        <span style="position:absolute; top:6px; left:calc(50% + 12px);
+        <span style="position:absolute; top:6px; left:calc(50% + 10px);
               background:var(--seal-red); color:#fff; font-size:11px; line-height:1;
               min-width:18px; height:18px; border-radius:9px; padding:0 5px;
               display:flex; align-items:center; justify-content:center;">

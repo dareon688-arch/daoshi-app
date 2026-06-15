@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>活动日历 · 老邢和他的学生们</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='guofeng.css') }}" rel="stylesheet">
+    {% include '_pwa_head.html' %}
+</head>
+<body>
+    <div class="container py-4" style="max-width: 560px;">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="brush m-0" style="font-size:22px;">活动日历</h1>
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('new_event') }}" class="btn btn-sm btn-ink">+ 加活动</a>
+            {% endif %}
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}{% for msg in messages %}
+            <div class="alert alert-success py-2">{{ msg }}</div>
+          {% endfor %}{% endif %}
+        {% endwith %}
+
+        <div class="brush mb-2" style="font-size:16px; color:var(--bamboo-dark);">即将开始</div>
+        {% if not upcoming %}
+            <p class="small mb-4" style="color:var(--muted);">近期还没有安排的活动</p>
+        {% endif %}
+        {% for e in upcoming %}
+        <div class="gf-card mb-2">
+            <div class="d-flex p-2 align-items-stretch">
+                <!-- 日期块 -->
+                <div class="text-center px-2 d-flex flex-column justify-content-center"
+                     style="min-width:58px; border-right:1px solid var(--border-soft);">
+                    <div class="fw-bold" style="font-size:20px; color:var(--seal-red);">{{ e.event_date.strftime('%d') }}</div>
+                    <div class="small" style="color:var(--muted);">{{ e.event_date.strftime('%m月') }}</div>
+                </div>
+                <div class="flex-grow-1 ps-3">
+                    <div class="fw-semibold">{{ e.title }}</div>
+                    <div class="small" style="color:var(--muted);">
+                        {{ e.event_date.strftime('%Y-%m-%d') }}
+                        {% if e.location %} · {{ e.location }}{% endif %}
+                    </div>
+                    {% if e.note %}<div class="small mt-1" style="white-space:pre-wrap;">{{ e.note }}</div>{% endif %}
+                    {% if current_user.is_admin %}
+                    <form method="POST" action="{{ url_for('delete_event', event_id=e.id) }}"
+                          onsubmit="return confirm('删除这个活动？');" class="m-0 mt-1">
+                        <button class="btn btn-link btn-sm text-danger p-0" style="font-size:.72rem;">删除</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if past %}
+        <div class="brush mb-2 mt-4" style="font-size:16px; color:var(--muted);">已过去</div>
+        {% for e in past %}
+        <div class="gf-card mb-2" style="opacity:.7;">
+            <div class="d-flex p-2 align-items-center">
+                <div class="text-center px-2" style="min-width:58px; border-right:1px solid var(--border-soft);">
+                    <div class="fw-bold" style="font-size:18px; color:var(--muted);">{{ e.event_date.strftime('%d') }}</div>
+                    <div class="small" style="color:var(--muted);">{{ e.event_date.strftime('%m月') }}</div>
+                </div>
+                <div class="flex-grow-1 ps-3">
+                    <div class="fw-semibold">{{ e.title }}</div>
+                    <div class="small" style="color:var(--muted);">{{ e.event_date.strftime('%Y-%m-%d') }}{% if e.location %} · {{ e.location }}{% endif %}</div>
+                    {% if current_user.is_admin %}
+                    <form method="POST" action="{{ url_for('delete_event', event_id=e.id) }}"
+                          onsubmit="return confirm('删除这个活动？');" class="m-0 mt-1">
+                        <button class="btn btn-link btn-sm text-danger p-0" style="font-size:.72rem;">删除</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+    </div>
+
+    {% set active = 'calendar' %}
+    {% include '_navbar.html' %}
+</body>
+</html>
