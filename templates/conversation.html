@@ -101,14 +101,18 @@
             <div class="p-3">
                 <div class="brush mb-2" style="font-size:18px;">发起会议</div>
                 <p class="small" style="color:var(--muted);">
-                    1. 先打开腾讯会议建会<br>
-                    2. 复制会议号或链接，粘贴到下面<br>
-                    3. 点「发到群里」，同门点一下就能加入
+                    1. 打开腾讯会议，点「快速会议」建会<br>
+                    2. 复制会议号，粘贴到下面<br>
+                    3. 点「发到群里」，同门一点就能加入
                 </p>
                 <button type="button" id="meetingOpenBtn"
-                        class="btn btn-bamboo w-100 mb-2">打开腾讯会议建会</button>
+                        class="btn btn-bamboo w-100 mb-1">打开腾讯会议</button>
+                <div class="text-center mb-2">
+                    <a href="https://meeting.tencent.com/" target="_blank"
+                       class="small" style="color:var(--muted);">没反应？点这里用网页打开 ↗</a>
+                </div>
                 <input type="text" id="meetingInput" class="form-control mb-2"
-                       placeholder="粘贴会议号或会议链接">
+                       placeholder="粘贴会议号，如 123-456-789">
                 <div class="d-flex gap-2">
                     <button type="button" id="meetingCancel" class="btn btn-bamboo flex-grow-1">取消</button>
                     <button type="button" id="meetingSend" class="btn btn-ink flex-grow-1">发到群里</button>
@@ -181,20 +185,11 @@
             e.target.value = '';  // 清空，允许再选同一张
         });
 
-        // 优先拉起本地腾讯会议 App，没装才退回网页
+        // 尝试拉起本地腾讯会议 App。手机浏览器对唤起限制很严，能弹就弹；
+        // 弹不出时不强行跳网页（避免误打开），让用户用弹框里的“用网页打开”链接兜底。
         function openTencentMeeting() {
-            var jumped = false;
-            function onHide() { jumped = true; }
-            document.addEventListener('visibilitychange', onHide);
-            window.addEventListener('pagehide', onHide);
+            // 关键：在用户点击的同步上下文里直接触发 scheme，成功率最高
             try { window.location.href = 'wemeet://'; } catch (err) {}
-            setTimeout(function () {
-                document.removeEventListener('visibilitychange', onHide);
-                window.removeEventListener('pagehide', onHide);
-                if (!jumped && !document.hidden) {
-                    window.open('https://meeting.tencent.com/', '_blank');
-                }
-            }, 1500);
         }
 
         // 会议弹框
@@ -215,8 +210,8 @@
         document.getElementById('meetingSend').addEventListener('click', async () => {
             const v = document.getElementById('meetingInput').value.trim();
             if (!v) { alert('请先粘贴会议号或链接'); return; }
-            // 组装一条会议邀请消息
-            const text = '📹 我发起了腾讯会议，点击或复制加入：\n' + v;
+            // 组装一条会议邀请消息（链接会自动变可点击；会议号可长按复制）
+            const text = '📹 腾讯会议邀请\n会议号/链接：' + v + '\n用腾讯会议输入会议号即可加入';
             const fd = new FormData();
             fd.append('content', text);
             try {

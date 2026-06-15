@@ -25,11 +25,15 @@
                     再把会议号发到群里，大家就能一起开会了。
                 </p>
 
-                <!-- 发起会议：优先拉起本地腾讯会议 App，没装才退回网页 -->
+                <!-- 打开腾讯会议：先尝试拉起 App -->
                 <button type="button" id="startBtn"
-                        class="btn btn-ink w-100 mb-2" style="height:46px; line-height:30px;">
+                        class="btn btn-ink w-100 mb-1" style="height:46px; line-height:30px;">
                     打开腾讯会议
                 </button>
+                <div class="text-center mb-3">
+                    <a href="https://meeting.tencent.com/" target="_blank"
+                       class="small" style="color:var(--muted);">没反应？点这里用网页打开 ↗</a>
+                </div>
 
                 <a href="https://meeting.tencent.com/download/" target="_blank"
                    class="btn btn-bamboo w-100" style="height:42px; line-height:26px;">
@@ -53,28 +57,11 @@
     </div>
 
     <script>
-        // 优先拉起本地腾讯会议 App；约 1.5 秒内没切走（说明没装）才退回网页。
-        function openTencentMeeting() {
-            var fallback = 'https://meeting.tencent.com/';
-            var jumped = false;
-            // 页面被切到后台（App 被拉起）时标记，避免再打开网页
-            function onHide() { jumped = true; }
-            document.addEventListener('visibilitychange', onHide);
-            window.addEventListener('pagehide', onHide);
-
-            // 尝试用协议唤起本地 App
+        // 在用户点击的同步上下文里直接触发 scheme，唤起成功率最高。
+        // 弹不出由用户用下面的“用网页打开”按钮兜底（手机浏览器对唤起限制很严，不强行跳）。
+        document.getElementById('startBtn').addEventListener('click', function () {
             try { window.location.href = 'wemeet://'; } catch (err) {}
-
-            // 1.5 秒后若还停在本页（没装 App），打开网页兜底
-            setTimeout(function () {
-                document.removeEventListener('visibilitychange', onHide);
-                window.removeEventListener('pagehide', onHide);
-                if (!jumped && !document.hidden) {
-                    window.open(fallback, '_blank');
-                }
-            }, 1500);
-        }
-        document.getElementById('startBtn').addEventListener('click', openTencentMeeting);
+        });
     </script>
 </body>
 </html>
