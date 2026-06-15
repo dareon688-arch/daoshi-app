@@ -105,8 +105,8 @@
                     2. 复制会议号或链接，粘贴到下面<br>
                     3. 点「发到群里」，同门点一下就能加入
                 </p>
-                <a href="https://meeting.tencent.com/" target="_blank"
-                   class="btn btn-bamboo w-100 mb-2">打开腾讯会议建会 ↗</a>
+                <button type="button" id="meetingOpenBtn"
+                        class="btn btn-bamboo w-100 mb-2">打开腾讯会议建会</button>
                 <input type="text" id="meetingInput" class="form-control mb-2"
                        placeholder="粘贴会议号或会议链接">
                 <div class="d-flex gap-2">
@@ -181,12 +181,29 @@
             e.target.value = '';  // 清空，允许再选同一张
         });
 
+        // 优先拉起本地腾讯会议 App，没装才退回网页
+        function openTencentMeeting() {
+            var jumped = false;
+            function onHide() { jumped = true; }
+            document.addEventListener('visibilitychange', onHide);
+            window.addEventListener('pagehide', onHide);
+            try { window.location.href = 'wemeet://'; } catch (err) {}
+            setTimeout(function () {
+                document.removeEventListener('visibilitychange', onHide);
+                window.removeEventListener('pagehide', onHide);
+                if (!jumped && !document.hidden) {
+                    window.open('https://meeting.tencent.com/', '_blank');
+                }
+            }, 1500);
+        }
+
         // 会议弹框
         const meetingModal = document.getElementById('meetingModal');
         document.getElementById('meetingBtn').addEventListener('click', () => {
             meetingModal.style.display = 'flex';
             document.getElementById('meetingInput').focus();
         });
+        document.getElementById('meetingOpenBtn').addEventListener('click', openTencentMeeting);
         document.getElementById('meetingCancel').addEventListener('click', () => {
             meetingModal.style.display = 'none';
         });

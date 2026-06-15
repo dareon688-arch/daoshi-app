@@ -25,11 +25,11 @@
                     再把会议号发到群里，大家就能一起开会了。
                 </p>
 
-                <!-- 发起会议：拉起腾讯会议 App，拉不起就去网页 -->
-                <a id="startBtn" href="https://meeting.tencent.com/" target="_blank"
-                   class="btn btn-ink w-100 mb-2" style="height:46px; line-height:30px;">
-                    发起 / 加入腾讯会议
-                </a>
+                <!-- 发起会议：优先拉起本地腾讯会议 App，没装才退回网页 -->
+                <button type="button" id="startBtn"
+                        class="btn btn-ink w-100 mb-2" style="height:46px; line-height:30px;">
+                    打开腾讯会议
+                </button>
 
                 <a href="https://meeting.tencent.com/download/" target="_blank"
                    class="btn btn-bamboo w-100" style="height:42px; line-height:26px;">
@@ -53,17 +53,28 @@
     </div>
 
     <script>
-        // 在手机上优先尝试拉起腾讯会议 App，失败再退回网页（网页是 href 默认行为）
-        document.getElementById('startBtn').addEventListener('click', function (e) {
-            var ua = navigator.userAgent;
-            var isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
-            if (isMobile) {
-                // 尝试用腾讯会议的 App scheme 唤起（唤起失败时浏览器仍会走 href 打开网页）
-                var t = setTimeout(function () { /* 唤起失败则什么都不做，href 已打开网页 */ }, 1500);
-                try { window.location.href = 'wemeet://'; } catch (err) {}
-            }
-            // 桌面端：直接走 href 打开网页，无需拦截
-        });
+        // 优先拉起本地腾讯会议 App；约 1.5 秒内没切走（说明没装）才退回网页。
+        function openTencentMeeting() {
+            var fallback = 'https://meeting.tencent.com/';
+            var jumped = false;
+            // 页面被切到后台（App 被拉起）时标记，避免再打开网页
+            function onHide() { jumped = true; }
+            document.addEventListener('visibilitychange', onHide);
+            window.addEventListener('pagehide', onHide);
+
+            // 尝试用协议唤起本地 App
+            try { window.location.href = 'wemeet://'; } catch (err) {}
+
+            // 1.5 秒后若还停在本页（没装 App），打开网页兜底
+            setTimeout(function () {
+                document.removeEventListener('visibilitychange', onHide);
+                window.removeEventListener('pagehide', onHide);
+                if (!jumped && !document.hidden) {
+                    window.open(fallback, '_blank');
+                }
+            }, 1500);
+        }
+        document.getElementById('startBtn').addEventListener('click', openTencentMeeting);
     </script>
 </body>
 </html>
