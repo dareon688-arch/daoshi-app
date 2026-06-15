@@ -171,7 +171,9 @@ class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id"))
     sender_id = db.Column(db.Integer, db.ForeignKey("user.id"))
-    content = db.Column(db.Text, nullable=False)
+    content = db.Column(db.Text, nullable=True)              # 文字内容（图片消息可为空）
+    msg_type = db.Column(db.String(10), default="text")     # text / image（以后可加 voice）
+    image = db.Column(db.String(200), nullable=True)        # 图片文件名（图片消息才有）
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     conversation = db.relationship("Conversation", back_populates="messages")
@@ -617,7 +619,21 @@ def conversation(conv_id):
                            title=conv.title_for(current_user), other=other)
 
 
-# ── 发消息 ──
+def _msg_to_dict(m):
+    """把一条消息转成前端要的字典（文字/图片通用）。"""
+    return {
+        "id": m.id,
+        "sender_id": m.sender_id,
+        "sender_name": m.sender.name if m.sender else "?",
+        "type": m.msg_type or "text",
+        "content": m.content or "",
+        "image_url": url_for("uploaded_file", filename=m.image) if m.image else None,
+        "time": m.created_at.strftime("%H:%M"),
+        "mine": m.sender_id == current_user.id,
+    }
+
+
+# ── 发文字消息 ──
 @app.route("/chat/<int:conv_id>/send", methods=["POST"])
 @login_required
 def send_message(conv_id):
@@ -628,7 +644,33 @@ def send_message(conv_id):
     if not content:
         return {"ok": False, "error": "消息不能为空"}, 400
 
-    msg = Message(conversation_id=conv.id, sender_id=current_user.id, content=content)
+    msg = Message(conversation_id=conv.id, sender_id=current_user.id,
+                  content=content, msg_type="text")
+    db.session.add(msg)
+    db.session.commit()
+    return {"ok": True, "id": msg.id}
+
+
+# ── 发图片消息 ──
+@app.route("/chat/<int:conv_id>/send-image", methods=["POST"])
+@login_required
+def send_image(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not _is_member(conv, current_user):
+        return {"ok": False, "error": "你不在这个会话里"}, 403
+    file = request.files.get("image")
+    if not file or not file.filename:
+        return {"ok": False, "error": "没有选择图片"}, 400
+    if not allowed_file(file.filename):
+        return {"ok": False, "error": "图片格式不支持"}, 400
+
+    ext = file.filename.rsplit(".", 1)[1].lower()
+    fname = f"{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(app.config["UPLOAD_FOLDER"], fname))
+
+    # content 给空字符串而非 None：兼容老库里 content 列的 NOT NULL 约束
+    msg = Message(conversation_id=conv.id, sender_id=current_user.id,
+                  content="", msg_type="image", image=fname)
     db.session.add(msg)
     db.session.commit()
     return {"ok": True, "id": msg.id}
@@ -645,17 +687,7 @@ def poll_messages(conv_id):
     msgs = (Message.query
             .filter(Message.conversation_id == conv.id, Message.id > after)
             .order_by(Message.created_at.asc()).all())
-    return {
-        "ok": True,
-        "messages": [{
-            "id": m.id,
-            "sender_id": m.sender_id,
-            "sender_name": m.sender.name if m.sender else "?",
-            "content": m.content,
-            "time": m.created_at.strftime("%H:%M"),
-            "mine": m.sender_id == current_user.id,
-        } for m in msgs],
-    }
+    return {"ok": True, "messages": [_msg_to_dict(m) for m in msgs]}
 
 
 # ──────────────────────────────────────────────────────────────
@@ -672,7 +704,9 @@ def auto_add_missing_columns():
     inspector = inspect(db.engine)
     existing_tables = inspector.get_table_names()
 
-    for model in (User, Photo, Announcement):
+    # 自动遍历所有已定义的模型（以后加任何表/字段都不会漏）
+    for mapper in db.Model.registry.mappers:
+        model = mapper.class_
         table = model.__tablename__
         if table not in existing_tables:
             continue

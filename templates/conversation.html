@@ -70,13 +70,24 @@
             {% if conv.is_group and m.sender_id != current_user.id %}
             <div class="who">{{ m.sender.name }}</div>
             {% endif %}
+            {% if m.msg_type == 'image' and m.image %}
+            <a href="{{ url_for('uploaded_file', filename=m.image) }}" target="_blank">
+                <img src="{{ url_for('uploaded_file', filename=m.image) }}"
+                     style="max-width:200px; max-height:240px; border-radius:10px; object-fit:cover;">
+            </a>
+            {% else %}
             <div class="bubble">{{ m.content }}</div>
+            {% endif %}
             <div class="time">{{ m.created_at.strftime('%H:%M') }}</div>
         </div>
         {% endfor %}
     </div>
 
     <form class="chat-input" id="sendForm" autocomplete="off">
+        <!-- 图片按钮（点了弹文件选择） -->
+        <label class="btn btn-bamboo m-0 d-flex align-items-center" style="cursor:pointer;">
+            <input type="file" id="imgInput" accept="image/*" hidden>图
+        </label>
         <input type="text" id="msgInput" class="form-control" placeholder="说点什么…" autofocus>
         <button type="submit" class="btn btn-ink" style="white-space:nowrap;">发送</button>
     </form>
@@ -98,13 +109,18 @@
             div.className = 'msg' + (m.mine ? ' mine' : '');
             let html = '';
             if (isGroup && !m.mine) html += '<div class="who">' + esc(m.sender_name) + '</div>';
-            html += '<div class="bubble">' + esc(m.content) + '</div>';
+            if (m.type === 'image' && m.image_url) {
+                html += '<a href="' + m.image_url + '" target="_blank">' +
+                        '<img src="' + m.image_url + '" style="max-width:200px;max-height:240px;border-radius:10px;object-fit:cover;"></a>';
+            } else {
+                html += '<div class="bubble">' + esc(m.content) + '</div>';
+            }
             html += '<div class="time">' + m.time + '</div>';
             div.innerHTML = html;
             body.appendChild(div);
         }
 
-        // 发送消息
+        // 发送文字消息
         document.getElementById('sendForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const input = document.getElementById('msgInput');
@@ -118,6 +134,21 @@
                 const data = await r.json();
                 if (data.ok) { await poll(); }
             } catch (err) { console.error(err); }
+        });
+
+        // 发送图片
+        document.getElementById('imgInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const fd = new FormData();
+            fd.append('image', file);
+            try {
+                const r = await fetch('/chat/' + convId + '/send-image', { method: 'POST', body: fd });
+                const data = await r.json();
+                if (data.ok) { await poll(); }
+                else { alert(data.error || '发送失败'); }
+            } catch (err) { console.error(err); }
+            e.target.value = '';  // 清空，允许再选同一张
         });
 
         // 轮询拉新消息

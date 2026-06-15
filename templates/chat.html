@@ -52,7 +52,7 @@
                     <div class="fw-semibold">{{ it.title }}</div>
                     <div class="small text-truncate" style="color:var(--muted);">
                         {% if it.last %}
-                            {% if it.conv.is_group %}{{ it.last.sender.name }}：{% endif %}{{ it.last.content }}
+                            {% if it.conv.is_group %}{{ it.last.sender.name }}：{% endif %}{% if it.last.msg_type == 'image' %}[图片]{% else %}{{ it.last.content }}{% endif %}
                         {% else %}还没有消息{% endif %}
                     </div>
                 </div>
