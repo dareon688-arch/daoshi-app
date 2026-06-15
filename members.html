@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>同门 · 老邢和他的学生们</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='guofeng.css') }}" rel="stylesheet">
+    {% include '_pwa_head.html' %}
+</head>
+<body>
+{# 可复用的成员卡片：点别人=私聊，点自己=详情 #}
+{% macro member_card(u) %}
+    {% if u.id == current_user.id %}
+    <a href="{{ url_for('member_detail', user_id=u.id) }}"
+       class="gf-card d-block mb-2 text-decoration-none" style="color:var(--ink);">
+    {% else %}
+    <form method="POST" action="{{ url_for('open_private', user_id=u.id) }}" class="m-0 mb-2">
+    <button type="submit" class="gf-card d-block w-100 border-0 text-start p-0"
+            style="color:var(--ink); background:var(--card-bg);">
+    {% endif %}
+        <div class="d-flex align-items-center p-2">
+            {% if u.photo %}
+                <img src="{{ url_for('uploaded_file', filename=u.photo) }}"
+                     class="rounded-circle me-3" width="48" height="48" style="object-fit:cover;">
+            {% else %}
+                <div class="rounded-circle me-3 d-flex align-items-center justify-content-center"
+                     style="width:48px;height:48px; background:var(--bamboo); color:#fff;">{{ u.name[0] }}</div>
+            {% endif %}
+            <div class="flex-grow-1">
+                <div class="fw-semibold">
+                    {{ u.name }}
+                    {% if u.id == current_user.id %}<span class="small" style="color:var(--muted);">（我）</span>{% endif %}
+                </div>
+                <div class="small" style="color:var(--muted);">
+                    {% if u.enroll_year %}{{ u.enroll_year }} 级{% endif %}
+                    {% if u.program_label %} · {{ u.program_label }}{% endif %}
+                    {% if u.work_unit %} · {{ u.work_unit }}{% endif %}
+                </div>
+            </div>
+            <span style="color:var(--muted);">{{ '›' if u.id == current_user.id else '💬' }}</span>
+        </div>
+    {% if u.id == current_user.id %}</a>{% else %}</button></form>{% endif %}
+{% endmacro %}
+
+    <div class="container py-4" style="max-width: 480px;">
+
+        <div class="text-center mb-3">
+            <div class="brush" style="font-size:26px;">老邢和他的学生们</div>
+            <div class="gf-subtitle" style="font-size:11px; margin-top:2px;">师门如家</div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <span class="small" style="color:var(--muted);">你好，<strong style="color:var(--ink);">{{ current_user.name }}</strong></span>
+            <div class="d-flex gap-1">
+                {% if current_user.is_admin %}
+                <a href="{{ url_for('admin_members') }}" class="btn btn-sm btn-bamboo">管理</a>
+                {% endif %}
+                <a href="{{ url_for('edit_profile') }}" class="btn btn-sm btn-ink">编辑信息</a>
+                <a href="{{ url_for('logout') }}" class="btn btn-sm btn-bamboo">退出</a>
+            </div>
+        </div>
+
+        <!-- 搜索框 -->
+        <form method="GET" class="mb-3 d-flex gap-2">
+            <input type="text" name="q" class="form-control" value="{{ q }}"
+                   placeholder="搜姓名 / 单位 / 籍贯 / 微信 / 邮箱">
+            <button type="submit" class="btn btn-ink" style="white-space:nowrap;">搜索</button>
+        </form>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}{% for msg in messages %}
+            <div class="alert alert-success py-2">{{ msg }}</div>
+          {% endfor %}{% endif %}
+        {% endwith %}
+
+        {% if search_results is not none %}
+        <!-- 搜索结果 -->
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h1 class="brush m-0" style="font-size:20px;">搜索“{{ q }}”</h1>
+            <a href="{{ url_for('members') }}" class="small" style="color:var(--bamboo-dark);">‹ 返回全部</a>
+        </div>
+        {% if not search_results %}
+            <p class="text-center py-4" style="color:var(--muted);">没找到相关的人</p>
+        {% endif %}
+        {% for u in search_results %}{{ member_card(u) }}{% endfor %}
+        <p class="text-center small mt-3 mb-0" style="color:var(--muted);">共 {{ search_results|length }} 人</p>
+
+        {% else %}
+        <!-- 分组（可展开/收起） -->
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h1 class="brush m-0" style="font-size:22px;">同门</h1>
+            <span class="small" style="color:var(--muted);">点头像聊天</span>
+        </div>
+
+        {% for g in groups %}
+        <div class="gf-card mb-2" style="overflow:hidden;">
+            <!-- 分组标题：点击展开/收起 -->
+            <div class="d-flex justify-content-between align-items-center p-2 grp-head"
+                 style="cursor:pointer; background:var(--xuan-paper);" data-target="grp{{ loop.index }}">
+                <span class="fw-semibold">{{ g.label }}
+                    <span class="small" style="color:var(--muted);">（{{ g.users|length }}人）</span>
+                </span>
+                <span class="grp-arrow" style="color:var(--muted);">▾</span>
+            </div>
+            <!-- 分组内容：默认展开 -->
+            <div id="grp{{ loop.index }}" class="grp-body p-2 pt-0">
+                {% for u in g.users %}{{ member_card(u) }}{% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+
+    </div>
+
+    {% set active = 'members' %}
+    {% include '_navbar.html' %}
+
+    <script>
+        // 分组标题点击展开/收起
+        document.querySelectorAll('.grp-head').forEach(function (h) {
+            h.addEventListener('click', function () {
+                var body = document.getElementById(h.dataset.target);
+                var arrow = h.querySelector('.grp-arrow');
+                if (body.style.display === 'none') {
+                    body.style.display = ''; arrow.textContent = '▾';
+                } else {
+                    body.style.display = 'none'; arrow.textContent = '▸';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

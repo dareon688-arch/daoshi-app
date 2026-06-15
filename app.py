@@ -85,6 +85,7 @@ class User(db.Model, UserMixin):
     email = db.Column(db.String(100), nullable=True)      # 邮箱（选填）
     photo = db.Column(db.String(200), nullable=True)      # 个人照片的文件名（选填）
     is_admin = db.Column(db.Boolean, default=False)       # 是否管理员（能删任意相册照片）
+    status = db.Column(db.String(20), default="approved") # approved=正常 / pending=待管理员审核
 
     # 把 program 代码转成中文显示用
     @property
@@ -256,11 +257,58 @@ def login():
 
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
+            if user.status == "pending":
+                flash("你的账号还在等管理员审核，通过后才能登录")
+                return render_template("login.html")
             login_user(user)                 # 登录成功，记住他
             return redirect(url_for("home"))
         else:
             flash("用户名或密码错误")          # 失败提示
     return render_template("login.html")
+
+
+# 申请账号的邀请码（师门内部约定，可在服务器用环境变量 INVITE_CODE 改）
+INVITE_CODE = os.environ.get("INVITE_CODE", "laoxing2024")
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    # 已登录的不用注册
+    if current_user.is_authenticated:
+        return redirect(url_for("home"))
+    if request.method == "POST":
+        invite = request.form.get("invite", "").strip()
+        username = request.form.get("username", "").strip()
+        name = request.form.get("name", "").strip()
+        year = request.form.get("enroll_year", "").strip()
+        password = request.form.get("password", "")
+
+        if invite != INVITE_CODE:
+            flash("邀请码不对，请向师门管理员索取")
+            return render_template("register.html")
+        if not username or not name or not year or not password:
+            flash("用户名、姓名、入学年份、密码都要填")
+            return render_template("register.html")
+        if len(password) < 6:
+            flash("密码至少 6 位")
+            return render_template("register.html")
+        if User.query.filter_by(username=username).first():
+            flash("这个用户名已被占用，换一个")
+            return render_template("register.html")
+        try:
+            year_int = int(year)
+        except ValueError:
+            flash("入学年份要填数字")
+            return render_template("register.html")
+
+        u = User(username=username, name=name, enroll_year=year_int,
+                 is_admin=False, status="pending")   # 待审核
+        u.set_password(password)
+        db.session.add(u)
+        db.session.commit()
+        flash("申请已提交，等管理员通过后就能登录啦")
+        return render_template("login.html")
+    return render_template("register.html")
 
 
 @app.route("/logout")
@@ -342,8 +390,37 @@ def admin_members():
     if not current_user.is_admin:
         flash("仅管理员可进入")
         return redirect(url_for("members"))
-    users = User.query.order_by(User.enroll_year.desc(), User.name).all()
-    return render_template("admin_members.html", users=users)
+    pending = User.query.filter_by(status="pending").order_by(User.id.desc()).all()
+    users = (User.query.filter(User.status != "pending")
+             .order_by(User.enroll_year.desc(), User.name).all())
+    return render_template("admin_members.html", users=users, pending=pending)
+
+
+@app.route("/admin/members/<int:user_id>/approve", methods=["POST"])
+@login_required
+def admin_approve_member(user_id):
+    if not current_user.is_admin:
+        flash("仅管理员可操作")
+        return redirect(url_for("members"))
+    u = db.get_or_404(User, user_id)
+    u.status = "approved"
+    db.session.commit()
+    flash(f"已通过 {u.name} 的申请")
+    return redirect(url_for("admin_members"))
+
+
+@app.route("/admin/members/<int:user_id>/reject", methods=["POST"])
+@login_required
+def admin_reject_member(user_id):
+    if not current_user.is_admin:
+        flash("仅管理员可操作")
+        return redirect(url_for("members"))
+    u = db.get_or_404(User, user_id)
+    name = u.name
+    db.session.delete(u)
+    db.session.commit()
+    flash(f"已拒绝并删除申请：{name}")
+    return redirect(url_for("admin_members"))
 
 
 @app.route("/admin/members/add", methods=["POST"])

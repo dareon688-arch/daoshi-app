@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>申请账号 · 老邢和他的学生们</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='guofeng.css') }}" rel="stylesheet">
+    {% include '_pwa_head.html' %}
+</head>
+<body>
+    <div class="container py-4" style="max-width: 400px;">
+
+        <div class="text-center mb-3 mt-2">
+            <div class="brush" style="font-size:24px;">申请加入</div>
+            <div class="gf-subtitle" style="font-size:12px; margin-top:4px;">老邢和他的学生们</div>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}{% for msg in messages %}
+            <div class="alert alert-warning py-2 small">{{ msg }}</div>
+          {% endfor %}{% endif %}
+        {% endwith %}
+
+        <form method="POST" class="gf-card">
+            <div class="p-3">
+                <div class="mb-2">
+                    <label class="form-label small">邀请码 <span class="text-danger">*</span></label>
+                    <input type="text" name="invite" class="form-control" required
+                           placeholder="向师门管理员索取">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">登录用户名 <span class="text-danger">*</span></label>
+                    <input type="text" name="username" class="form-control" required placeholder="建议用拼音">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">姓名 <span class="text-danger">*</span></label>
+                    <input type="text" name="name" class="form-control" required>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small">入学年份 <span class="text-danger">*</span></label>
+                    <input type="number" name="enroll_year" class="form-control" required placeholder="如 2024">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">设置密码 <span class="text-danger">*</span></label>
+                    <input type="password" name="password" class="form-control" required placeholder="至少 6 位">
+                </div>
+                <button type="submit" class="btn btn-ink w-100">提交申请</button>
+                <a href="{{ url_for('login') }}" class="btn btn-link w-100 mt-1" style="color:var(--muted);">已有账号？去登录</a>
+            </div>
+        </form>
+
+        <p class="text-center small mt-3" style="color:var(--muted);">提交后需管理员审核通过才能登录</p>
+    </div>
+</body>
+</html>
