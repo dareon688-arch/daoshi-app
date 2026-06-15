@@ -333,6 +333,98 @@ def member_detail(user_id):
     return render_template("member_detail.html", user=user)
 
 
+# ──────────────────────────────────────────────────────────────
+# 管理员后台：管理成员（加人 / 重置密码 / 删除 / 设管理员）
+# ──────────────────────────────────────────────────────────────
+@app.route("/admin/members")
+@login_required
+def admin_members():
+    if not current_user.is_admin:
+        flash("仅管理员可进入")
+        return redirect(url_for("members"))
+    users = User.query.order_by(User.enroll_year.desc(), User.name).all()
+    return render_template("admin_members.html", users=users)
+
+
+@app.route("/admin/members/add", methods=["POST"])
+@login_required
+def admin_add_member():
+    if not current_user.is_admin:
+        flash("仅管理员可操作")
+        return redirect(url_for("members"))
+    username = request.form.get("username", "").strip()
+    name = request.form.get("name", "").strip()
+    year = request.form.get("enroll_year", "").strip()
+    password = request.form.get("password", "").strip()
+    if not username or not name or not year or not password:
+        flash("用户名、姓名、入学年份、初始密码都要填")
+        return redirect(url_for("admin_members"))
+    if User.query.filter_by(username=username).first():
+        flash(f"用户名 {username} 已存在")
+        return redirect(url_for("admin_members"))
+    try:
+        year_int = int(year)
+    except ValueError:
+        flash("入学年份要填数字")
+        return redirect(url_for("admin_members"))
+    u = User(username=username, name=name, enroll_year=year_int, is_admin=False)
+    u.set_password(password)
+    db.session.add(u)
+    db.session.commit()
+    flash(f"已添加 {name}（用户名 {username}，初始密码 {password}），把它发给本人")
+    return redirect(url_for("admin_members"))
+
+
+@app.route("/admin/members/<int:user_id>/reset", methods=["POST"])
+@login_required
+def admin_reset_password(user_id):
+    if not current_user.is_admin:
+        flash("仅管理员可操作")
+        return redirect(url_for("members"))
+    u = db.get_or_404(User, user_id)
+    new_pwd = request.form.get("new_password", "").strip()
+    if len(new_pwd) < 6:
+        flash("新密码至少 6 位")
+        return redirect(url_for("admin_members"))
+    u.set_password(new_pwd)
+    db.session.commit()
+    flash(f"已把 {u.name} 的密码重置为 {new_pwd}，发给本人")
+    return redirect(url_for("admin_members"))
+
+
+@app.route("/admin/members/<int:user_id>/toggle-admin", methods=["POST"])
+@login_required
+def admin_toggle_admin(user_id):
+    if not current_user.is_admin:
+        flash("仅管理员可操作")
+        return redirect(url_for("members"))
+    u = db.get_or_404(User, user_id)
+    if u.id == current_user.id:
+        flash("不能改自己的管理员身份")
+        return redirect(url_for("admin_members"))
+    u.is_admin = not u.is_admin
+    db.session.commit()
+    flash(f"{u.name} {'已设为管理员' if u.is_admin else '已取消管理员'}")
+    return redirect(url_for("admin_members"))
+
+
+@app.route("/admin/members/<int:user_id>/delete", methods=["POST"])
+@login_required
+def admin_delete_member(user_id):
+    if not current_user.is_admin:
+        flash("仅管理员可操作")
+        return redirect(url_for("members"))
+    u = db.get_or_404(User, user_id)
+    if u.id == current_user.id:
+        flash("不能删除自己")
+        return redirect(url_for("admin_members"))
+    name = u.name
+    db.session.delete(u)
+    db.session.commit()
+    flash(f"已删除成员 {name}")
+    return redirect(url_for("admin_members"))
+
+
 # ── 编辑“我的信息”：只能改自己 ──
 @app.route("/edit-profile", methods=["GET", "POST"])
 @login_required
