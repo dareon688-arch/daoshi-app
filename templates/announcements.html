@@ -33,9 +33,13 @@
         {% endif %}
 
         {% for a in items %}
-        <div class="card shadow-sm mb-3">
+        <!-- 置顶的公告加金色边框高亮 -->
+        <div class="card shadow-sm mb-3 {% if a.pinned %}border-warning border-2{% endif %}">
             <div class="card-body">
-                <h2 class="h6 fw-bold mb-1">{{ a.title }}</h2>
+                <h2 class="h6 fw-bold mb-1">
+                    {% if a.pinned %}<span class="badge bg-warning text-dark me-1">📌 置顶</span>{% endif %}
+                    {{ a.title }}
+                </h2>
                 <div class="text-muted mb-2" style="font-size:.75rem;">
                     {{ a.author.name if a.author else '管理员' }} ·
                     {{ a.created_at.strftime('%Y-%m-%d %H:%M') }}
@@ -44,7 +48,14 @@
                 <div style="white-space:pre-wrap;">{{ a.content }}</div>
 
                 {% if current_user.is_admin %}
-                <div class="mt-2">
+                <div class="mt-2 d-flex gap-3 align-items-center">
+                    <!-- 置顶 / 取消置顶 -->
+                    <form method="POST" action="{{ url_for('toggle_pin_announcement', item_id=a.id) }}" class="m-0">
+                        <button class="btn btn-link btn-sm p-0" style="font-size:.75rem;">
+                            {{ '取消置顶' if a.pinned else '📌 置顶' }}
+                        </button>
+                    </form>
+                    <!-- 删除 -->
                     <form method="POST" action="{{ url_for('delete_announcement', item_id=a.id) }}"
                           onsubmit="return confirm('确定删除这条公告？');" class="m-0">
                         <button class="btn btn-link btn-sm text-danger p-0" style="font-size:.75rem;">删除</button>

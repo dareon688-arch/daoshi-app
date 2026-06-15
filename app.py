@@ -119,6 +119,7 @@ class Announcement(db.Model):
     content = db.Column(db.Text, nullable=False)             # 公告内容
     author_id = db.Column(db.Integer, db.ForeignKey("user.id"))  # 谁发的
     created_at = db.Column(db.DateTime, default=datetime.utcnow)  # 发布时间
+    pinned = db.Column(db.Boolean, default=False)            # 是否置顶（管理员设置）
 
     author = db.relationship("User")
 
@@ -333,12 +334,29 @@ def delete_photo(photo_id):
     return redirect(url_for("album"))
 
 
-# ── 公告：所有人可看，列表按时间倒序（最新在上） ──
+# ── 公告：所有人可看，置顶的排最前，其余按时间倒序 ──
 @app.route("/announcements")
 @login_required
 def announcements():
-    items = Announcement.query.order_by(Announcement.created_at.desc()).all()
+    items = Announcement.query.order_by(
+        Announcement.pinned.desc(),        # 置顶（True）排在前面
+        Announcement.created_at.desc(),    # 其次按时间，新的在上
+    ).all()
     return render_template("announcements.html", items=items)
+
+
+# ── 公告：置顶 / 取消置顶（仅管理员） ──
+@app.route("/announcements/pin/<int:item_id>", methods=["POST"])
+@login_required
+def toggle_pin_announcement(item_id):
+    if not current_user.is_admin:
+        flash("只有管理员能置顶公告")
+        return redirect(url_for("announcements"))
+    item = db.get_or_404(Announcement, item_id)
+    item.pinned = not item.pinned          # 反转：置顶↔取消置顶
+    db.session.commit()
+    flash("已置顶 📌" if item.pinned else "已取消置顶")
+    return redirect(url_for("announcements"))
 
 
 # ── 公告：发布（仅管理员） ──
