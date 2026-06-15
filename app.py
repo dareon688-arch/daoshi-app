@@ -400,10 +400,47 @@ def delete_announcement(item_id):
 
 
 # ──────────────────────────────────────────────────────────────
-# 4. 启动时：建表 + 确保有一个初始管理员
+# 4. 启动时：建表 + 自动补缺失的列 + 确保有一个初始管理员
 # ──────────────────────────────────────────────────────────────
+def auto_add_missing_columns():
+    """自动给已存在的表补上“模型里有、但数据库里还没有”的列。
+
+    作用：以后给某张表加了新字段（如给 Announcement 加 pinned），
+    重新部署时不必手动跑 ALTER TABLE —— 启动时自动检测并补齐，
+    避免出现 “no such column” 报错。只处理简单的加列，安全无损。
+    """
+    from sqlalchemy import inspect, text
+    inspector = inspect(db.engine)
+    existing_tables = inspector.get_table_names()
+
+    for model in (User, Photo, Announcement):
+        table = model.__tablename__
+        if table not in existing_tables:
+            continue
+        db_cols = {c["name"] for c in inspector.get_columns(table)}
+        for col in model.__table__.columns:
+            if col.name in db_cols:
+                continue
+            # 拼出列的类型和默认值，补这一列
+            col_type = col.type.compile(dialect=db.engine.dialect)
+            default_sql = ""
+            if col.default is not None and getattr(col.default, "arg", None) is not None:
+                val = col.default.arg
+                if isinstance(val, bool):
+                    default_sql = f" DEFAULT {1 if val else 0}"
+                elif isinstance(val, (int, float)):
+                    default_sql = f" DEFAULT {val}"
+                elif isinstance(val, str):
+                    default_sql = f" DEFAULT '{val}'"
+            sql = f'ALTER TABLE {table} ADD COLUMN {col.name} {col_type}{default_sql}'
+            with db.engine.begin() as conn:
+                conn.execute(text(sql))
+            print(f"自动补列：{table}.{col.name}")
+
+
 with app.app_context():
     db.create_all()
+    auto_add_missing_columns()        # ← 自动补齐缺失的列
 
     # 如果数据库里一个用户都没有（比如刚部署到云上、库是空的），
     # 就用环境变量创建一个初始管理员，方便第一次登录进去。
