@@ -27,48 +27,39 @@
           {% endif %}
         {% endwith %}
 
-        {% if not items %}
-            <p class="text-center py-5" style="color:var(--muted);">
-                还没有会话<br>
-                <a href="{{ url_for('members') }}" style="color:var(--bamboo-dark);">去「同门」点一个人开始聊天 ›</a>
-            </p>
-        {% endif %}
-
-        {% for it in items %}
-        <a href="{{ url_for('conversation', conv_id=it.conv.id) }}"
-           class="gf-card d-block mb-2 text-decoration-none" style="color:var(--ink);">
-            <div class="d-flex align-items-center p-2">
-                <div class="position-relative me-3">
-                    <div class="rounded-circle d-flex align-items-center justify-content-center"
-                         style="width:46px;height:46px; background:{{ '#8a6d3b' if it.conv.is_group else 'var(--bamboo)' }}; color:#fff;">
-                        {{ '群' if it.conv.is_group else it.title[0] }}
-                    </div>
-                    {% if it.unread > 0 %}
-                    <span class="position-absolute" style="top:-4px; right:-4px; background:var(--seal-red);
-                          color:#fff; font-size:10px; min-width:18px; height:18px; border-radius:9px;
-                          padding:0 5px; display:flex; align-items:center; justify-content:center;">
-                        {{ it.unread if it.unread < 100 else '99+' }}
-                    </span>
-                    {% endif %}
-                </div>
-                <div class="flex-grow-1" style="min-width:0;">
-                    <div class="fw-semibold">{{ it.title }}</div>
-                    <div class="small text-truncate" style="color:var(--muted);">
-                        {% if it.last %}
-                            {% if it.conv.is_group %}{{ it.last.sender.name }}：{% endif %}{% if it.last.msg_type == 'image' %}[图片]{% else %}{{ it.last.content }}{% endif %}
-                        {% else %}还没有消息{% endif %}
-                    </div>
-                </div>
-                {% if it.last %}
-                <span class="small ms-2" style="color:var(--muted);">{{ it.last.created_at.strftime('%H:%M') }}</span>
-                {% endif %}
-            </div>
-        </a>
-        {% endfor %}
+        <!-- 会话列表（实时推送来时会局部刷新这个容器） -->
+        <div id="chatList">
+            {% include '_chat_list.html' %}
+        </div>
 
     </div>
 
     {% set active = 'chat' %}
     {% include '_navbar.html' %}
+
+    <script>
+        // 消息页：收到实时推送 / 页面重新可见时，局部刷新会话列表（红点、最后消息都更新）
+        (function () {
+            function refreshList() {
+                fetch('/chat/list', { credentials: 'same-origin' })
+                    .then(function (r) { return r.text(); })
+                    .then(function (html) {
+                        var box = document.getElementById('chatList');
+                        if (box) box.innerHTML = html;
+                    })
+                    .catch(function () {});
+            }
+            // 监听实时推送（socket 在 _navbar 里已建立；这里再单独监听一个，互不影响）
+            if (typeof io !== 'undefined') {
+                var s = io({ transports: ['websocket', 'polling'] });
+                s.on('unread_update', refreshList);
+            }
+            document.addEventListener('visibilitychange', function () {
+                if (!document.hidden) refreshList();
+            });
+            // 兜底：停在消息页时每 10 秒刷一次列表
+            setInterval(function () { if (!document.hidden) refreshList(); }, 10000);
+        })();
+    </script>
 </body>
 </html>

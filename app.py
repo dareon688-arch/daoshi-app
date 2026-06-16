@@ -992,14 +992,10 @@ def meeting():
     return render_template("meeting.html")
 
 
-# ── 聊天首页：我的会话列表 ──
-@app.route("/chat")
-@login_required
-def chat():
-    convs = _my_conversations()
-    # 给每个会话准备：标题、最后一条消息预览
+def _build_chat_items():
+    """构建当前用户的会话列表数据（标题、最后一条消息、未读数）。"""
     items = []
-    for c in convs:
+    for c in _my_conversations():
         last = (Message.query.filter_by(conversation_id=c.id)
                 .order_by(Message.created_at.desc()).first())
         items.append({
@@ -1008,9 +1004,22 @@ def chat():
             "last": last,
             "unread": _unread_count(c, current_user),
         })
-    # 可选私聊对象：除自己外的所有成员
+    return items
+
+
+# ── 聊天首页：我的会话列表 ──
+@app.route("/chat")
+@login_required
+def chat():
     others = User.query.filter(User.id != current_user.id).all()
-    return render_template("chat.html", items=items, others=others)
+    return render_template("chat.html", items=_build_chat_items(), others=others)
+
+
+# ── 会话列表片段：消息页收到实时推送时，用它局部刷新列表（不整页刷新）──
+@app.route("/chat/list")
+@login_required
+def chat_list():
+    return render_template("_chat_list.html", items=_build_chat_items())
 
 
 # ── 开始（或打开）和某人的私聊 ──
