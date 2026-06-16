@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>群信息 · 老邢和他的学生们</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='guofeng.css') }}" rel="stylesheet">
+    {% include '_pwa_head.html' %}
+</head>
+<body>
+    <div class="container py-4" style="max-width: 480px;">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="{{ url_for('conversation', conv_id=conv.id) }}" class="btn btn-sm btn-bamboo">‹ 返回</a>
+            <h1 class="brush m-0" style="font-size:20px;">群信息</h1>
+            <span style="width:48px;"></span>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}{% for msg in messages %}
+            <div class="alert alert-success py-2 small">{{ msg }}</div>
+          {% endfor %}{% endif %}
+        {% endwith %}
+
+        <!-- 群头像 + 群名 -->
+        <div class="gf-card mb-3">
+            <div class="p-3 text-center">
+                {% if conv.group_photo %}
+                    <img src="{{ url_for('uploaded_file', filename=conv.group_photo) }}"
+                         class="rounded-circle mb-2" width="80" height="80" style="object-fit:cover;">
+                {% else %}
+                    <div class="rounded-circle mx-auto mb-2 d-flex align-items-center justify-content-center"
+                         style="width:80px;height:80px; background:#8a6d3b; color:#fff; font-size:1.6rem;">群</div>
+                {% endif %}
+                <div class="brush" style="font-size:22px;">{{ conv.name or '群聊' }}</div>
+                <div class="small" style="color:var(--muted);">{{ members|length }} 位成员</div>
+
+                {% if can_manage %}
+                <div class="mt-3 d-flex gap-2 justify-content-center">
+                    <button type="button" class="btn btn-sm btn-bamboo"
+                            onclick="document.getElementById('renameBox').style.display='block'">改群名</button>
+                    <!-- 改头像：点按钮触发隐藏的文件选择，选完自动提交 -->
+                    <form method="POST" action="{{ url_for('group_photo', conv_id=conv.id) }}"
+                          enctype="multipart/form-data" id="photoForm" class="d-inline m-0">
+                        <input type="file" name="photo" accept="image/*" id="photoInput" hidden
+                               onchange="document.getElementById('photoForm').submit()">
+                        <button type="button" class="btn btn-sm btn-bamboo"
+                                onclick="document.getElementById('photoInput').click()">改头像</button>
+                    </form>
+                </div>
+                <!-- 改群名输入框（默认隐藏） -->
+                <div id="renameBox" style="display:none;" class="mt-2">
+                    <form method="POST" action="{{ url_for('rename_group', conv_id=conv.id) }}" class="d-flex gap-2">
+                        <input type="text" name="name" class="form-control form-control-sm" value="{{ conv.name or '' }}" maxlength="80">
+                        <button class="btn btn-sm btn-ink">保存</button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- 成员列表 -->
+        <div class="gf-card mb-3">
+            <div class="p-2">
+                <div class="fw-semibold mb-2 px-1">群成员</div>
+                {% for u in members %}
+                <div class="d-flex align-items-center p-2">
+                    {% if u.photo %}
+                        <img src="{{ url_for('uploaded_file', filename=u.photo) }}" class="rounded-circle me-2" width="38" height="38" style="object-fit:cover;">
+                    {% else %}
+                        <div class="rounded-circle me-2 d-flex align-items-center justify-content-center" style="width:38px;height:38px; background:var(--bamboo); color:#fff;">{{ u.name[0] }}</div>
+                    {% endif %}
+                    <span class="flex-grow-1">{{ u.name }}
+                        {% if u.id == conv.creator_id %}<span class="seal" style="padding:1px 5px; font-size:.65rem;">群主</span>{% endif %}
+                    </span>
+                    {% if can_manage and u.id != conv.creator_id %}
+                    <form method="POST" action="{{ url_for('remove_group_member', conv_id=conv.id, user_id=u.id) }}"
+                          onsubmit="return confirm('把 {{ u.name }} 移出群？');" class="m-0">
+                        <button class="btn btn-link btn-sm text-danger p-0" style="font-size:.75rem;">移除</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- 加人（仅管理员） -->
+        {% if can_manage and candidates %}
+        <div class="gf-card mb-3">
+            <div class="p-3">
+                <div class="fw-semibold mb-2">拉人进群</div>
+                <form method="POST" action="{{ url_for('add_group_members', conv_id=conv.id) }}">
+                    <div style="max-height:200px; overflow:auto;">
+                        {% for u in candidates %}
+                        <label class="d-flex align-items-center p-1" style="cursor:pointer;">
+                            <input type="checkbox" name="user_ids" value="{{ u.id }}" class="me-2">
+                            <span>{{ u.name }} <span class="small" style="color:var(--muted);">{% if u.enroll_year %}{{ u.enroll_year }}级{% endif %}</span></span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <button class="btn btn-ink w-100 mt-2">加入所选</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 退群 / 解散 -->
+        <div class="gf-card mb-3">
+            <div class="p-3">
+                {% if conv.creator_id == current_user.id %}
+                <form method="POST" action="{{ url_for('dissolve_group', conv_id=conv.id) }}"
+                      onsubmit="return confirm('解散后整个群和聊天记录都会删除，确定？');">
+                    <button class="btn btn-ink w-100" style="background:var(--seal-red);">解散群聊</button>
+                </form>
+                {% else %}
+                <form method="POST" action="{{ url_for('leave_group', conv_id=conv.id) }}"
+                      onsubmit="return confirm('确定退出这个群？');">
+                    <button class="btn btn-bamboo w-100">退出群聊</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

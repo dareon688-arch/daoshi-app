@@ -206,8 +206,13 @@ class Conversation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     is_group = db.Column(db.Boolean, default=False)          # True=群聊，False=私聊
     name = db.Column(db.String(80), nullable=True)           # 群名（群聊才有）
-    creator_id = db.Column(db.Integer, db.ForeignKey("user.id"))  # 谁建的
+    creator_id = db.Column(db.Integer, db.ForeignKey("user.id"))  # 谁建的（=群主）
+    group_photo = db.Column(db.String(200), nullable=True)   # 群头像文件名（群聊可选）
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def can_manage(self, user):
+        """谁能管理这个群：群主（建群人）或系统管理员。"""
+        return self.is_group and (self.creator_id == user.id or user.is_admin)
 
     # 这个会话里的成员（通过 Membership 关联）
     memberships = db.relationship("Membership", back_populates="conversation",
@@ -247,6 +252,7 @@ class Message(db.Model):
     content = db.Column(db.Text, nullable=True)              # 文字内容（图片消息可为空）
     msg_type = db.Column(db.String(10), default="text")     # text / image（以后可加 voice）
     image = db.Column(db.String(200), nullable=True)        # 图片文件名（图片消息才有）
+    recalled = db.Column(db.Boolean, default=False)         # 是否已撤回
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     conversation = db.relationship("Conversation", back_populates="messages")
@@ -1124,6 +1130,7 @@ def _msg_to_dict(m):
         "image_url": url_for("uploaded_file", filename=m.image) if m.image else None,
         "time": m.created_at.strftime("%H:%M"),
         "mine": m.sender_id == current_user.id,
+        "recalled": bool(m.recalled),
     }
 
 
@@ -1172,6 +1179,156 @@ def send_image(conv_id):
     return {"ok": True, "id": msg.id}
 
 
+# ── 撤回消息：自己发的随时撤；管理员/群主能撤任意 ──
+@app.route("/chat/<int:conv_id>/recall/<int:msg_id>", methods=["POST"])
+@login_required
+def recall_message(conv_id, msg_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not _is_member(conv, current_user):
+        return {"ok": False, "error": "你不在这个会话里"}, 403
+    msg = db.get_or_404(Message, msg_id)
+    if msg.conversation_id != conv.id:
+        return {"ok": False, "error": "消息不属于这个会话"}, 400
+
+    # 权限：自己发的，或系统管理员，或（群聊里）群主
+    is_mine = msg.sender_id == current_user.id
+    can_manage = current_user.is_admin or (conv.is_group and conv.creator_id == current_user.id)
+    if not (is_mine or can_manage):
+        return {"ok": False, "error": "你没有权限撤回这条消息"}, 403
+
+    msg.recalled = True
+    db.session.commit()
+    # 实时通知会话里所有人：这条消息被撤回了
+    for m in conv.memberships:
+        socketio.emit("message_recalled",
+                      {"conv_id": conv.id, "msg_id": msg.id},
+                      room=f"user_{m.user_id}")
+    return {"ok": True}
+
+
+# ── 群信息页：看成员、改名、改头像、加人、移除、退群、解散 ──
+@app.route("/chat/<int:conv_id>/info")
+@login_required
+def group_info(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not conv.is_group or not _is_member(conv, current_user):
+        flash("无权查看")
+        return redirect(url_for("chat"))
+    members = [m.user for m in conv.memberships]
+    # 可加入的人：同门里还不在群的
+    member_ids = {u.id for u in members}
+    candidates = User.query.filter(
+        User.id.notin_(member_ids), User.status == "approved"
+    ).order_by(User.name).all()
+    return render_template("group_info.html", conv=conv, members=members,
+                           candidates=candidates,
+                           can_manage=conv.can_manage(current_user))
+
+
+@app.route("/chat/<int:conv_id>/rename", methods=["POST"])
+@login_required
+def rename_group(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not conv.can_manage(current_user):
+        flash("只有群主或管理员能改群名")
+        return redirect(url_for("group_info", conv_id=conv.id))
+    name = (request.form.get("name") or "").strip()
+    if name:
+        conv.name = name[:80]
+        db.session.commit()
+        flash("群名已修改 ✅")
+    return redirect(url_for("group_info", conv_id=conv.id))
+
+
+@app.route("/chat/<int:conv_id>/photo", methods=["POST"])
+@login_required
+def group_photo(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not conv.can_manage(current_user):
+        flash("只有群主或管理员能改群头像")
+        return redirect(url_for("group_info", conv_id=conv.id))
+    file = request.files.get("photo")
+    if file and file.filename and allowed_file(file.filename):
+        ext = file.filename.rsplit(".", 1)[1].lower()
+        fname = f"{uuid.uuid4().hex}.{ext}"
+        file.save(os.path.join(app.config["UPLOAD_FOLDER"], fname))
+        conv.group_photo = fname
+        db.session.commit()
+        flash("群头像已更新 ✅")
+    return redirect(url_for("group_info", conv_id=conv.id))
+
+
+@app.route("/chat/<int:conv_id>/add-members", methods=["POST"])
+@login_required
+def add_group_members(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not conv.can_manage(current_user):
+        flash("只有群主或管理员能加人")
+        return redirect(url_for("group_info", conv_id=conv.id))
+    ids = request.form.getlist("user_ids")
+    added = 0
+    for uid in ids:
+        uid = int(uid)
+        if not Membership.query.filter_by(conversation_id=conv.id, user_id=uid).first():
+            db.session.add(Membership(conversation_id=conv.id, user_id=uid))
+            added += 1
+    db.session.commit()
+    if added:
+        flash(f"已加入 {added} 人 ✅")
+    return redirect(url_for("group_info", conv_id=conv.id))
+
+
+@app.route("/chat/<int:conv_id>/remove/<int:user_id>", methods=["POST"])
+@login_required
+def remove_group_member(conv_id, user_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not conv.can_manage(current_user):
+        flash("只有群主或管理员能移除成员")
+        return redirect(url_for("group_info", conv_id=conv.id))
+    if user_id == conv.creator_id:
+        flash("不能移除群主")
+        return redirect(url_for("group_info", conv_id=conv.id))
+    mem = Membership.query.filter_by(conversation_id=conv.id, user_id=user_id).first()
+    if mem:
+        db.session.delete(mem)
+        db.session.commit()
+        flash("已移除该成员")
+    return redirect(url_for("group_info", conv_id=conv.id))
+
+
+@app.route("/chat/<int:conv_id>/leave", methods=["POST"])
+@login_required
+def leave_group(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not conv.is_group:
+        return redirect(url_for("chat"))
+    # 群主退群=解散；普通成员退群=只移除自己
+    if conv.creator_id == current_user.id:
+        db.session.delete(conv)
+        db.session.commit()
+        flash("群已解散")
+    else:
+        mem = Membership.query.filter_by(conversation_id=conv.id, user_id=current_user.id).first()
+        if mem:
+            db.session.delete(mem)
+            db.session.commit()
+        flash("已退出群聊")
+    return redirect(url_for("chat"))
+
+
+@app.route("/chat/<int:conv_id>/dissolve", methods=["POST"])
+@login_required
+def dissolve_group(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not conv.can_manage(current_user):
+        flash("只有群主或管理员能解散群")
+        return redirect(url_for("group_info", conv_id=conv.id))
+    db.session.delete(conv)
+    db.session.commit()
+    flash("群已解散")
+    return redirect(url_for("chat"))
+
+
 # ── 轮询：拉取某会话里 id 大于 after 的新消息（前端每隔几秒调一次） ──
 @app.route("/chat/<int:conv_id>/poll")
 @login_required
@@ -1183,7 +1340,12 @@ def poll_messages(conv_id):
     msgs = (Message.query
             .filter(Message.conversation_id == conv.id, Message.id > after)
             .order_by(Message.created_at.asc()).all())
-    return {"ok": True, "messages": [_msg_to_dict(m) for m in msgs]}
+    # 同时返回本会话里已被撤回的消息 id（让前端把已显示的消息标记成撤回）
+    recalled_ids = [m.id for m in Message.query
+                    .filter(Message.conversation_id == conv.id, Message.recalled == True).all()]
+    return {"ok": True,
+            "messages": [_msg_to_dict(m) for m in msgs],
+            "recalled": recalled_ids}
 
 
 # ──────────────────────────────────────────────────────────────
