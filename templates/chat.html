@@ -49,10 +49,9 @@
                     })
                     .catch(function () {});
             }
-            // 监听实时推送（socket 在 _navbar 里已建立；这里再单独监听一个，互不影响）
-            if (typeof io !== 'undefined') {
-                var s = io({ transports: ['websocket', 'polling'] });
-                s.on('unread_update', refreshList);
+            // 复用 _navbar 里已建立的同一条 socket（避免每页开多条连接占满服务器线程）
+            if (window.__navSocket) {
+                window.__navSocket.on('unread_update', refreshList);
             }
             document.addEventListener('visibilitychange', function () {
                 if (!document.hidden) refreshList();

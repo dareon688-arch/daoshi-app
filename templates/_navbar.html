@@ -54,9 +54,10 @@
                 .catch(function () {});
         }
 
-        // 1) WebSocket 实时推送
+        // 1) WebSocket 实时推送（整页共用这一条连接，其它脚本可用 window.__navSocket 复用）
         if (typeof io !== 'undefined') {
             var sock = io({ transports: ['websocket', 'polling'] });
+            window.__navSocket = sock;
             sock.on('unread_update', function (data) { setBadge(data.total || 0); });
             // 断线重连后，主动补拉一次（断线期间可能漏了推送）
             sock.on('reconnect', refreshUnread);

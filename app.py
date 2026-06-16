@@ -229,8 +229,9 @@ class Conversation(db.Model):
         群聊显示群名；私聊显示“对方的名字”。"""
         if self.is_group:
             return self.name or "群聊"
-        others = [m.user for m in self.memberships if m.user_id != viewer.id]
-        return others[0].name if others else "（空会话）"
+        # 私聊：取对方名字；对方账号可能已被删，做好兜底
+        others = [m.user for m in self.memberships if m.user_id != viewer.id and m.user]
+        return others[0].name if others else "（对方已退出）"
 
 
 # ── 会话成员表：谁在哪个会话里 ──
