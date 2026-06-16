@@ -30,22 +30,47 @@
     {% endfor %}
 </nav>
 
-{# 实时更新红点：监听服务器推送的 unread_update 事件 #}
+{# 实时更新红点：WebSocket 推送 + 多重兜底（手机连接易断，需要兜底） #}
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
     (function () {
-        if (typeof io === 'undefined') return;
-        var sock = io({ transports: ['websocket', 'polling'] });
-        sock.on('unread_update', function (data) {
+        // 统一的“更新红点显示”函数
+        function setBadge(n) {
             var badge = document.getElementById('navUnread');
             if (!badge) return;
-            var n = data.total || 0;
             if (n > 0) {
                 badge.textContent = n < 100 ? n : '99+';
                 badge.style.display = 'flex';
             } else {
                 badge.style.display = 'none';
             }
+        }
+
+        // 主动向服务器查一次最新未读数（兜底：推送漏掉时用）
+        function refreshUnread() {
+            fetch('/api/unread', { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (d) { setBadge(d.total || 0); })
+                .catch(function () {});
+        }
+
+        // 1) WebSocket 实时推送
+        if (typeof io !== 'undefined') {
+            var sock = io({ transports: ['websocket', 'polling'] });
+            sock.on('unread_update', function (data) { setBadge(data.total || 0); });
+            // 断线重连后，主动补拉一次（断线期间可能漏了推送）
+            sock.on('reconnect', refreshUnread);
+            sock.on('connect', refreshUnread);
+        }
+
+        // 2) 页面重新可见时主动拉（治手机切后台/锁屏回来红点不更新）
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) refreshUnread();
         });
+        // 页面从缓存恢复（手机返回上一页）时也拉一次
+        window.addEventListener('pageshow', refreshUnread);
+
+        // 3) 兜底轮询：每 20 秒查一次（手机长连接断了也不会一直不更新）
+        setInterval(function () { if (!document.hidden) refreshUnread(); }, 20000);
     })();
 </script>

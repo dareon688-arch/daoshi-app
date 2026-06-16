@@ -973,6 +973,18 @@ def inject_unread():
     return {"unread_total": 0}
 
 
+# ── 查询当前用户未读总数（前端在页面重新可见时主动拉，兜底实时推送漏掉的情况）──
+@app.route("/api/unread")
+@login_required
+def api_unread():
+    if getattr(current_user, "notify_on", True) is False:
+        return {"total": 0}
+    try:
+        return {"total": _total_unread(current_user)}
+    except Exception:
+        return {"total": 0}
+
+
 # ── 会议引导页：一键打开腾讯会议 ──
 @app.route("/meeting")
 @login_required
