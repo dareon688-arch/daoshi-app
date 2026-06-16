@@ -17,14 +17,35 @@
        color:{{ 'var(--bamboo-dark)' if active == key else 'var(--muted)' }};
        {% if active == key %}font-weight:500;{% endif %}">
         <span style="font-size:15px; letter-spacing:1px;">{{ label }}</span>
-        {% if key == 'chat' and unread_total and unread_total > 0 %}
-        <span style="position:absolute; top:6px; left:calc(50% + 10px);
+        {% if key == 'chat' %}
+        <span id="navUnread" style="position:absolute; top:6px; left:calc(50% + 10px);
               background:var(--seal-red); color:#fff; font-size:11px; line-height:1;
               min-width:18px; height:18px; border-radius:9px; padding:0 5px;
-              display:flex; align-items:center; justify-content:center;">
-            {{ unread_total if unread_total < 100 else '99+' }}
+              align-items:center; justify-content:center;
+              display:{{ 'flex' if unread_total and unread_total > 0 else 'none' }};">
+            {{ unread_total if unread_total and unread_total < 100 else ('99+' if unread_total else '') }}
         </span>
         {% endif %}
     </a>
     {% endfor %}
 </nav>
+
+{# 实时更新红点：监听服务器推送的 unread_update 事件 #}
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+    (function () {
+        if (typeof io === 'undefined') return;
+        var sock = io({ transports: ['websocket', 'polling'] });
+        sock.on('unread_update', function (data) {
+            var badge = document.getElementById('navUnread');
+            if (!badge) return;
+            var n = data.total || 0;
+            if (n > 0) {
+                badge.textContent = n < 100 ? n : '99+';
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        });
+    })();
+</script>

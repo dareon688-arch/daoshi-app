@@ -21,6 +21,7 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
+from flask_socketio import SocketIO, join_room
 
 # ──────────────────────────────────────────────────────────────
 # 1. 基本配置
@@ -59,6 +60,38 @@ def allowed_file(filename):
 
 
 db = SQLAlchemy(app)
+
+# 实时推送：用 threading 模式（不依赖 eventlet/gevent，兼容性最好，几十人够用）
+socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
+
+
+@socketio.on("connect")
+def _on_connect(auth=None):
+    # 每个登录用户连上后，加入“以自己 user id 命名的房间”，
+    # 这样给某人推送时，emit 到 user_<id> 房间即可。
+    if current_user.is_authenticated:
+        join_room(f"user_{current_user.id}")
+
+
+def push_unread(user_id):
+    """给某个用户推送一次‘未读数变化’事件，让前端实时更新红点。"""
+    try:
+        u = db.session.get(User, user_id)
+        if u and getattr(u, "notify_on", True):
+            total = _total_unread(u)
+        else:
+            total = 0
+        socketio.emit("unread_update", {"total": total}, room=f"user_{user_id}")
+    except Exception:
+        pass
+
+
+def _notify_conversation(conv, exclude_user_id=None):
+    """给会话里的成员（除发送者）推送未读更新，让红点实时出现。"""
+    for m in conv.memberships:
+        if m.user_id != exclude_user_id:
+            push_unread(m.user_id)
+
 
 # 登录管理器：负责“记住谁登录了”
 login_manager = LoginManager(app)
@@ -1047,6 +1080,7 @@ def conversation(conv_id):
     if mem:
         mem.last_read_at = datetime.utcnow()
         db.session.commit()
+        push_unread(current_user.id)   # 读了消息，实时让自己的红点消失
 
     # 私聊时，找出对方（点头像看资料用）
     other = None
@@ -1087,6 +1121,7 @@ def send_message(conv_id):
                   content=content, msg_type="text")
     db.session.add(msg)
     db.session.commit()
+    _notify_conversation(conv, exclude_user_id=current_user.id)
     return {"ok": True, "id": msg.id}
 
 
@@ -1112,6 +1147,7 @@ def send_image(conv_id):
                   content="", msg_type="image", image=fname)
     db.session.add(msg)
     db.session.commit()
+    _notify_conversation(conv, exclude_user_id=current_user.id)
     return {"ok": True, "id": msg.id}
 
 
@@ -1190,4 +1226,6 @@ with app.app_context():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # 本地开发：用 socketio.run 启动（支持 WebSocket）
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True,
+                 allow_unsafe_werkzeug=True)
