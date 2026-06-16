@@ -57,6 +57,8 @@
             document.addEventListener('visibilitychange', function () {
                 if (!document.hidden) refreshList();
             });
+            // 关键：从“后退缓存(bfcache)”恢复时（电脑Chrome点返回回到本页）也刷新
+            window.addEventListener('pageshow', function (e) { refreshList(); });
             // 兜底：停在消息页时每 10 秒刷一次列表
             setInterval(function () { if (!document.hidden) refreshList(); }, 10000);
         })();
