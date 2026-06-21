@@ -192,7 +192,9 @@
     <script>
         const convId = {{ conv.id }};
         const isGroup = {{ 'true' if conv.is_group else 'false' }};
-        const mySound = '{{ current_user.sound or "dingdong" }}';  // 我选的提示音
+        // 会话页是全屏布局、没有底部导航(_navbar)，也没有全局 socket，
+        // 所以它的提示音得靠自己的 poll 来响（其它有导航的页面才靠全局 socket）。
+        const mySound = '{{ current_user.sound or "dingdong" }}';
         const body = document.getElementById('chatBody');
         let lastId = {{ msgs[-1].id if msgs else 0 }};
 

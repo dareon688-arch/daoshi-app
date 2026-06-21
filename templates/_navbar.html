@@ -46,6 +46,16 @@
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
     (function () {
+        // 我选的提示音（全局：任意页面收到新消息都用它响）
+        var mySound = '{{ current_user.sound or "dingdong" }}';
+
+        // 收到“来了新消息”的推送时响一次铃（is_new 区分真新消息 vs 读消息清红点）
+        function ringIfNew(data) {
+            if (data && data.is_new && mySound !== 'off' && window.playSound) {
+                window.playSound(mySound);
+            }
+        }
+
         // 统一的“更新红点显示”函数
         function setBadge(n) {
             var badge = document.getElementById('navUnread');
@@ -70,7 +80,10 @@
         if (typeof io !== 'undefined') {
             var sock = io({ transports: ['websocket', 'polling'] });
             window.__navSocket = sock;
-            sock.on('unread_update', function (data) { setBadge(data.total || 0); });
+            sock.on('unread_update', function (data) {
+                setBadge(data.total || 0);
+                ringIfNew(data);   // 来新消息时全局响铃（任意页面都响）
+            });
             // 断线重连后，主动补拉一次（断线期间可能漏了推送）
             sock.on('reconnect', refreshUnread);
             sock.on('connect', refreshUnread);

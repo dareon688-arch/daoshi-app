@@ -73,21 +73,23 @@ def _on_connect(auth=None):
         join_room(f"user_{current_user.id}")
 
 
-def push_unread(user_id):
-    """给某个用户推送一次‘未读数变化’事件，让前端实时更新红点。"""
+def push_unread(user_id, is_new=False):
+    """给某个用户推送一次‘未读数变化’事件，让前端实时更新红点。
+    is_new=True 表示这次是“真的来了新消息”（对方发来），前端据此决定是否响提示音；
+    is_new=False 是“读了消息让红点消失”这类变化，不该响铃。"""
     try:
         u = db.session.get(User, user_id)
         total = _total_unread(u) if u else 0
-        socketio.emit("unread_update", {"total": total}, room=f"user_{user_id}")
+        socketio.emit("unread_update", {"total": total, "is_new": is_new}, room=f"user_{user_id}")
     except Exception:
         pass
 
 
 def _notify_conversation(conv, exclude_user_id=None):
-    """给会话里的成员（除发送者）推送未读更新，让红点实时出现。"""
+    """给会话里的成员（除发送者）推送未读更新，让红点实时出现并响提示音。"""
     for m in conv.memberships:
         if m.user_id != exclude_user_id:
-            push_unread(m.user_id)
+            push_unread(m.user_id, is_new=True)   # 来新消息 → 前端响铃
 
 
 # 登录管理器：负责“记住谁登录了”
