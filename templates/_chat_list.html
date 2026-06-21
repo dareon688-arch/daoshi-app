@@ -11,10 +11,17 @@
    class="gf-card d-block mb-2 text-decoration-none" style="color:var(--ink);">
     <div class="d-flex align-items-center p-2">
         <div class="position-relative me-3">
+            {% if it.other_photo %}
+            <!-- 私聊且对方有头像照片：显示真实头像 -->
+            <img src="{{ url_for('uploaded_file', filename=it.other_photo) }}"
+                 class="rounded-circle" style="width:46px;height:46px; object-fit:cover;">
+            {% else %}
+            <!-- 群聊显示'群'字；私聊无头像显示对方名字首字 -->
             <div class="rounded-circle d-flex align-items-center justify-content-center"
                  style="width:46px;height:46px; background:{{ '#8a6d3b' if it.conv.is_group else 'var(--bamboo)' }}; color:#fff;">
                 {{ '群' if it.conv.is_group else it.title[0] }}
             </div>
+            {% endif %}
             {% if it.unread > 0 %}
             <span class="position-absolute" style="top:-4px; right:-4px; background:var(--seal-red);
                   color:#fff; font-size:10px; min-width:18px; height:18px; border-radius:9px;

@@ -1056,11 +1056,18 @@ def _build_chat_items():
         last = (Message.query.filter_by(conversation_id=c.id)
                 .filter(~Message.id.in_(hidden) if hidden else True)
                 .order_by(Message.created_at.desc()).first())
+        # 私聊：取对方头像照片（群聊用'群'字圆圈，不取）
+        other_photo = None
+        if not c.is_group:
+            others = [m.user for m in c.memberships if m.user_id != current_user.id and m.user]
+            if others and others[0].photo:
+                other_photo = others[0].photo
         items.append({
             "conv": c,
             "title": c.title_for(current_user),
             "last": last,
             "unread": _unread_count(c, current_user),
+            "other_photo": other_photo,   # 对方头像文件名（无则 None → 模板用首字圆圈）
         })
     return items
 
@@ -1222,6 +1229,8 @@ def _msg_to_dict(m):
         "time": m.created_at.strftime("%H:%M"),
         "mine": m.sender_id == current_user.id,
         "recalled": bool(m.recalled),
+        # 发送者头像：有照片给 url，没有给 None（前端用名字首字圆圈兜底）
+        "avatar_url": url_for("uploaded_file", filename=m.sender.photo) if (m.sender and m.sender.photo) else None,
     }
 
 

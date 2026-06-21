@@ -31,8 +31,19 @@
             display: flex; gap: 8px;
             max-width: 600px; width: 100%; margin: 0 auto;
         }
-        .msg { margin-bottom: 12px; display: flex; flex-direction: column; }
-        .msg.mine { align-items: flex-end; }
+        /* 每条消息：横向 [头像][气泡列]，自己的消息整行反向（头像在右） */
+        .msg { margin-bottom: 12px; display: flex; align-items: flex-start; gap: 8px; }
+        .msg.mine { flex-direction: row-reverse; }
+        /* 气泡列：装 who/气泡/时间，竖排 */
+        .msg .col { display: flex; flex-direction: column; min-width: 0; }
+        .msg.mine .col { align-items: flex-end; }
+        /* 头像：方圆角，有照片显示照片，无照片显示首字 */
+        .msg .avatar {
+            flex: 0 0 auto; width: 36px; height: 36px; border-radius: 8px;
+            object-fit: cover; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--bamboo); color: #fff; font-size: 15px; user-select: none;
+        }
         .msg .who { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
         .bubble {
             display: inline-block; max-width: 78%;
@@ -101,25 +112,34 @@
 
     <div class="chat-body" id="chatBody">
         {% for m in msgs %}
-        <div class="msg {{ 'mine' if m.sender_id == current_user.id else '' }}"
-             data-msg-id="{{ m.id }}" data-mine="{{ '1' if m.sender_id == current_user.id else '0' }}">
-            {% if conv.is_group and m.sender_id != current_user.id %}
-            <div class="who">{{ m.sender.name }}</div>
-            {% endif %}
-            {% set can_recall = (m.sender_id == current_user.id) or current_user.is_admin or (conv.is_group and conv.creator_id == current_user.id) %}
-            {% if m.recalled %}
-            <div class="recalled-tip">{{ '你' if m.sender_id == current_user.id else m.sender.name }}撤回了一条消息</div>
-            {% elif m.msg_type == 'image' and m.image %}
-            <a href="{{ url_for('uploaded_file', filename=m.image) }}" target="_blank"
-               class="msg-content"{% if can_recall %} data-can-recall="1"{% endif %}>
-                <img src="{{ url_for('uploaded_file', filename=m.image) }}"
-                     style="max-width:200px; max-height:240px; border-radius:10px; object-fit:cover;">
-            </a>
-            <div class="time">{{ m.created_at.strftime('%H:%M') }}</div>
+        {% set mine = m.sender_id == current_user.id %}
+        <div class="msg {{ 'mine' if mine else '' }}"
+             data-msg-id="{{ m.id }}" data-mine="{{ '1' if mine else '0' }}">
+            {# 头像：有照片显示照片，没有显示名字首字。撤回的消息也保留头像，版式不跳 #}
+            {% if m.sender and m.sender.photo %}
+            <img class="avatar" src="{{ url_for('uploaded_file', filename=m.sender.photo) }}" alt="">
             {% else %}
-            <div class="bubble msg-content"{% if can_recall %} data-can-recall="1"{% endif %}>{{ m.content | urlize(target='_blank') }}</div>
-            <div class="time">{{ m.created_at.strftime('%H:%M') }}</div>
+            <div class="avatar">{{ m.sender.name[0] if m.sender else '?' }}</div>
             {% endif %}
+            <div class="col">
+                {% if conv.is_group and not mine %}
+                <div class="who">{{ m.sender.name }}</div>
+                {% endif %}
+                {% set can_recall = mine or current_user.is_admin or (conv.is_group and conv.creator_id == current_user.id) %}
+                {% if m.recalled %}
+                <div class="recalled-tip">{{ '你' if mine else m.sender.name }}撤回了一条消息</div>
+                {% elif m.msg_type == 'image' and m.image %}
+                <a href="{{ url_for('uploaded_file', filename=m.image) }}" target="_blank"
+                   class="msg-content"{% if can_recall %} data-can-recall="1"{% endif %}>
+                    <img src="{{ url_for('uploaded_file', filename=m.image) }}"
+                         style="max-width:200px; max-height:240px; border-radius:10px; object-fit:cover;">
+                </a>
+                <div class="time">{{ m.created_at.strftime('%H:%M') }}</div>
+                {% else %}
+                <div class="bubble msg-content"{% if can_recall %} data-can-recall="1"{% endif %}>{{ m.content | urlize(target='_blank') }}</div>
+                <div class="time">{{ m.created_at.strftime('%H:%M') }}</div>
+                {% endif %}
+            </div>
         </div>
         {% endfor %}
     </div>
@@ -190,27 +210,36 @@
         // 我能不能撤回任意消息（管理员/群主）
         const canManageAll = {{ 'true' if (current_user.is_admin or (conv.is_group and conv.creator_id == current_user.id)) else 'false' }};
 
+        // 头像 HTML：有照片用 img，没有用名字首字圆圈（和后端 Jinja 保持一致）
+        function avatarHtml(m) {
+            if (m.avatar_url) {
+                return '<img class="avatar" src="' + m.avatar_url + '" alt="">';
+            }
+            const ch = (m.sender_name && m.sender_name.length) ? esc(m.sender_name[0]) : '?';
+            return '<div class="avatar">' + ch + '</div>';
+        }
+
         function addMsg(m) {
             const div = document.createElement('div');
             div.className = 'msg' + (m.mine ? ' mine' : '');
             div.dataset.msgId = m.id;
             div.dataset.mine = m.mine ? '1' : '0';
+            let col = '';
             if (m.recalled) {
-                div.innerHTML = '<div class="recalled-tip">' + (m.mine ? '你' : esc(m.sender_name)) + '撤回了一条消息</div>';
-                body.appendChild(div); return;
-            }
-            let html = '';
-            if (isGroup && !m.mine) html += '<div class="who">' + esc(m.sender_name) + '</div>';
-            // 自己的 或 管理员/群主 → 这条消息可撤回（长按气泡才弹撤回菜单）
-            const canRecall = (m.mine || canManageAll) ? ' data-can-recall="1"' : '';
-            if (m.type === 'image' && m.image_url) {
-                html += '<a href="' + m.image_url + '" target="_blank" class="msg-content"' + canRecall + '>' +
-                        '<img src="' + m.image_url + '" style="max-width:200px;max-height:240px;border-radius:10px;object-fit:cover;"></a>';
+                col = '<div class="recalled-tip">' + (m.mine ? '你' : esc(m.sender_name)) + '撤回了一条消息</div>';
             } else {
-                html += '<div class="bubble msg-content"' + canRecall + '>' + linkify(m.content) + '</div>';
+                if (isGroup && !m.mine) col += '<div class="who">' + esc(m.sender_name) + '</div>';
+                // 自己的 或 管理员/群主 → 这条消息可撤回（长按气泡才弹撤回菜单）
+                const canRecall = (m.mine || canManageAll) ? ' data-can-recall="1"' : '';
+                if (m.type === 'image' && m.image_url) {
+                    col += '<a href="' + m.image_url + '" target="_blank" class="msg-content"' + canRecall + '>' +
+                           '<img src="' + m.image_url + '" style="max-width:200px;max-height:240px;border-radius:10px;object-fit:cover;"></a>';
+                } else {
+                    col += '<div class="bubble msg-content"' + canRecall + '>' + linkify(m.content) + '</div>';
+                }
+                col += '<div class="time">' + m.time + '</div>';
             }
-            html += '<div class="time">' + m.time + '</div>';
-            div.innerHTML = html;
+            div.innerHTML = avatarHtml(m) + '<div class="col">' + col + '</div>';
             body.appendChild(div);
         }
 
@@ -309,12 +338,15 @@
             body.addEventListener('scroll', hidePop);
         })();
 
-        // 把某条消息显示成“已撤回”
+        // 把某条消息显示成“已撤回”（只替换气泡列 .col，保留头像，版式不跳）
         function markRecalled(msgId, mine) {
             const el = body.querySelector('[data-msg-id="' + msgId + '"]');
             if (!el) return;
             const who = mine || el.dataset.mine === '1' ? '你' : (el.querySelector('.who') ? el.querySelector('.who').textContent : '对方');
-            el.innerHTML = '<div class="recalled-tip">' + who + '撤回了一条消息</div>';
+            const col = el.querySelector('.col');
+            const tip = '<div class="recalled-tip">' + who + '撤回了一条消息</div>';
+            if (col) col.innerHTML = tip;
+            else el.innerHTML = tip;   // 兜底（理论上不会走到）
         }
 
         // 发送文字消息
