@@ -460,8 +460,9 @@ def members():
         key = (year, prog)
         if key not in groups:
             year_label = f"{year} 级" if year else "未填年份"
-            prog_label = u.program_label or "未填方式"
-            groups[key] = {"label": f"{year_label} · {prog_label}", "users": []}
+            # 填了培养方式才显示“· 方式”，没填就只显示年级（避免满屏“未填方式”）
+            label = f"{year_label} · {u.program_label}" if u.program_label else year_label
+            groups[key] = {"label": label, "users": []}
         groups[key]["users"].append(u)
     # 按年份倒序、方式排，转成有序列表
     group_list = [groups[k] for k in sorted(groups.keys(), key=lambda k: (-k[0], k[1]))]

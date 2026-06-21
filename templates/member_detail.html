@@ -26,11 +26,10 @@
                 <!-- 大头像 -->
                 {% if user.photo %}
                     <img src="{{ url_for('uploaded_file', filename=user.photo) }}"
-                         class="rounded-circle mb-3" width="110" height="110"
-                         style="object-fit: cover;">
+                         class="rounded-circle mb-3 gf-avatar-img" width="110" height="110">
                 {% else %}
-                    <div class="rounded-circle mb-3 mx-auto d-flex align-items-center justify-content-center"
-                         style="width:110px;height:110px;font-size:2rem; background:var(--bamboo); color:#fff;">
+                    <div class="rounded-circle mb-3 mx-auto d-flex align-items-center justify-content-center gf-avatar"
+                         style="width:110px;height:110px;font-size:2.6rem;">
                         {{ user.name[0] }}
                     </div>
                 {% endif %}

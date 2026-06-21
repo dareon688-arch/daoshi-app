@@ -32,10 +32,10 @@
         <div class="d-flex align-items-center p-2">
             {% if u.photo %}
                 <img src="{{ url_for('uploaded_file', filename=u.photo) }}"
-                     class="rounded-circle me-3" width="48" height="48" style="object-fit:cover;">
+                     class="rounded-circle me-3 gf-avatar-img" width="48" height="48">
             {% else %}
-                <div class="rounded-circle me-3 d-flex align-items-center justify-content-center"
-                     style="width:48px;height:48px; background:var(--bamboo); color:#fff;">{{ u.name[0] }}</div>
+                <div class="rounded-circle me-3 d-flex align-items-center justify-content-center gf-avatar"
+                     style="width:48px;height:48px;">{{ u.name[0] }}</div>
             {% endif %}
             <div class="flex-grow-1">
                 <div class="fw-semibold">
@@ -49,7 +49,11 @@
                     {% if u.work_unit %} · {{ u.work_unit }}{% endif %}
                 </div>
             </div>
-            <span style="color:var(--muted);">{{ '›' if u.id == current_user.id else '💬' }}</span>
+            {% if u.id == current_user.id %}
+                <span style="color:var(--muted); font-size:18px;">›</span>
+            {% else %}
+                <span class="chat-ico" title="发消息">✉</span>
+            {% endif %}
         </div>
     {% if u.id == current_user.id %}</a>{% else %}</button></form>{% endif %}
 {% endmacro %}

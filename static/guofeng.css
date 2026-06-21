@@ -87,3 +87,50 @@ body {
     border-color: var(--bamboo);
     box-shadow: 0 0 0 .15rem rgba(95, 125, 90, .15);
 }
+
+/* ── 视觉精致化（2026-06）────────────────────────────── */
+
+/* 卡片：更有层次的柔和阴影 + hover 轻微浮起，按钮卡片可点更有反馈 */
+.gf-card {
+    transition: box-shadow .18s ease, transform .18s ease;
+}
+.gf-card:hover {
+    box-shadow: 0 6px 22px rgba(95, 125, 90, .14);
+    transform: translateY(-1px);
+}
+
+/* 文字头像（无照片时的圆圈）：竹青柔和渐变 + 细描边 + 内层高光，比纯色更雅
+   用法：把原来 background:var(--bamboo) 的圆圈加上 class="gf-avatar" 即可 */
+.gf-avatar {
+    background: linear-gradient(145deg, #6f8c68 0%, #51714b 100%);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, .35);
+    box-shadow: 0 2px 6px rgba(70, 96, 63, .25),
+                inset 0 1px 2px rgba(255, 255, 255, .25);
+    font-family: "Kaiti SC", "STKaiti", "KaiTi", serif;
+    letter-spacing: 0;
+}
+/* 群聊头像换暖褐渐变，和私聊竹青区分开 */
+.gf-avatar.group {
+    background: linear-gradient(145deg, #9c8157 0%, #7c6438 100%);
+    box-shadow: 0 2px 6px rgba(124, 100, 56, .25),
+                inset 0 1px 2px rgba(255, 255, 255, .25);
+}
+/* 真实头像照片：也加一圈柔和细边，和文字头像观感统一 */
+.gf-avatar-img {
+    border: 1px solid var(--border-soft);
+    box-shadow: 0 2px 6px rgba(70, 96, 63, .18);
+    object-fit: cover;
+}
+
+/* 国风聊天图标（替代突兀的 💬 emoji）：竹青描边小气泡 */
+.chat-ico {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 50%;
+    color: var(--bamboo-dark);
+    border: 1px solid var(--border-soft);
+    background: #fbf9f2;
+    font-size: 15px; flex: 0 0 auto;
+    transition: background .15s ease, color .15s ease;
+}
+.gf-card:hover .chat-ico { background: var(--bamboo); color: #fff; border-color: var(--bamboo); }

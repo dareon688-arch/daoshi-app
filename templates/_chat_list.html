@@ -14,11 +14,11 @@
             {% if it.other_photo %}
             <!-- 私聊且对方有头像照片：显示真实头像 -->
             <img src="{{ url_for('uploaded_file', filename=it.other_photo) }}"
-                 class="rounded-circle" style="width:46px;height:46px; object-fit:cover;">
+                 class="rounded-circle gf-avatar-img" style="width:46px;height:46px;">
             {% else %}
-            <!-- 群聊显示'群'字；私聊无头像显示对方名字首字 -->
-            <div class="rounded-circle d-flex align-items-center justify-content-center"
-                 style="width:46px;height:46px; background:{{ '#8a6d3b' if it.conv.is_group else 'var(--bamboo)' }}; color:#fff;">
+            <!-- 群聊显示'群'字（暖褐）；私聊无头像显示对方名字首字（竹青） -->
+            <div class="rounded-circle d-flex align-items-center justify-content-center gf-avatar {{ 'group' if it.conv.is_group else '' }}"
+                 style="width:46px;height:46px;">
                 {{ '群' if it.conv.is_group else it.title[0] }}
             </div>
             {% endif %}
