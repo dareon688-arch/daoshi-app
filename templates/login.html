@@ -140,7 +140,7 @@
                   {% endif %}
                 {% endwith %}
 
-                <form method="POST">
+                <form method="POST" action="{{ url_for('login') }}">
                     <input type="text" name="username" class="form-control form-control-sm mb-2"
                            placeholder="用户名" required autofocus
                            style="height:38px;">

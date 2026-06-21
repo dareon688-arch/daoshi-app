@@ -372,7 +372,7 @@ def register():
         db.session.add(u)
         db.session.commit()
         flash("申请已提交，等管理员通过后就能登录啦")
-        return render_template("login.html")
+        return redirect(url_for("login"))
     return render_template("register.html")
 
 
