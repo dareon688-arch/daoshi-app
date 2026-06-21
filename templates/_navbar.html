@@ -26,6 +26,15 @@
             {{ unread_total if unread_total and unread_total < 100 else ('99+' if unread_total else '') }}
         </span>
         {% endif %}
+        {# 管理员专属：同门 tab 上的待审核申请红点（变化很慢，不上实时，刷新/翻页即更新）#}
+        {% if key == 'members' and current_user.is_admin and pending_count and pending_count > 0 %}
+        <span style="position:absolute; top:6px; left:calc(50% + 10px);
+              background:var(--seal-red); color:#fff; font-size:11px; line-height:1;
+              min-width:18px; height:18px; border-radius:9px; padding:0 5px;
+              display:flex; align-items:center; justify-content:center;">
+            {{ pending_count if pending_count < 100 else '99+' }}
+        </span>
+        {% endif %}
     </a>
     {% endfor %}
 </nav>
