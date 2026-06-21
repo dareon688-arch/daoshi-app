@@ -8,7 +8,8 @@
 
 {% for it in items %}
 <a href="{{ url_for('conversation', conv_id=it.conv.id) }}"
-   class="gf-card d-block mb-2 text-decoration-none" style="color:var(--ink);">
+   class="gf-card d-block mb-2 text-decoration-none" style="color:var(--ink);
+   {% if it.pinned %}background:#f3f0e2;{% endif %}">
     <div class="d-flex align-items-center p-2">
         <div class="position-relative me-3">
             {% if it.other_photo %}
@@ -31,7 +32,9 @@
             {% endif %}
         </div>
         <div class="flex-grow-1" style="min-width:0;">
-            <div class="fw-semibold">{{ it.title }}</div>
+            <div class="fw-semibold">
+                {% if it.pinned %}<span title="已置顶" style="color:var(--seal-red); font-size:12px; margin-right:2px;">📌</span>{% endif %}{{ it.title }}
+            </div>
             <div class="small text-truncate" style="color:var(--muted);">
                 {% if it.last %}
                     {% if it.conv.is_group and it.last.sender %}{{ it.last.sender.name }}：{% endif %}{% if it.last.recalled %}[已撤回]{% elif it.last.msg_type == 'image' %}[图片]{% else %}{{ it.last.content }}{% endif %}
@@ -39,7 +42,7 @@
             </div>
         </div>
         {% if it.last %}
-        <span class="small ms-2" style="color:var(--muted);">{{ it.last.created_at.strftime('%H:%M') }}</span>
+        <span class="small ms-2" style="color:var(--muted); white-space:nowrap;">{{ it.time_label }}</span>
         {% endif %}
     </div>
 </a>

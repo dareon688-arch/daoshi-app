@@ -105,6 +105,18 @@
         </div>
         {% endif %}
 
+        <!-- 置顶聊天 -->
+        <div class="gf-card mb-3">
+            <div class="p-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="fw-semibold">置顶聊天</div>
+                    <div class="small" style="color:var(--muted);">置顶后排在消息列表最上面（只你自己看到）</div>
+                </div>
+                <button type="button" id="pinBtn" class="btn btn-sm {{ 'btn-ink' if pinned else 'btn-bamboo' }}"
+                        style="white-space:nowrap;">{{ '取消置顶' if pinned else '置顶' }}</button>
+            </div>
+        </div>
+
         <!-- 删除聊天记录（只删自己这边）-->
         <div class="gf-card mb-3">
             <div class="p-3">
@@ -135,5 +147,25 @@
         </div>
 
     </div>
+
+    <script>
+        // 置顶 / 取消置顶（只影响自己的消息列表排序）
+        document.getElementById('pinBtn').addEventListener('click', function () {
+            var btn = this;
+            fetch('{{ url_for("toggle_pin", conv_id=conv.id) }}', { method: 'POST' })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d.ok) { alert(d.error || '操作失败'); return; }
+                    if (d.pinned) {
+                        btn.textContent = '取消置顶';
+                        btn.classList.remove('btn-bamboo'); btn.classList.add('btn-ink');
+                    } else {
+                        btn.textContent = '置顶';
+                        btn.classList.remove('btn-ink'); btn.classList.add('btn-bamboo');
+                    }
+                })
+                .catch(function () { alert('网络错误'); });
+        });
+    </script>
 </body>
 </html>

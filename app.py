@@ -285,6 +285,22 @@ def _hidden_ids(user, conv_id):
     return {r[0] for r in rows}
 
 
+# ── 会话置顶表：记录“某用户把某个会话置顶了” ──
+# 置顶是“每人自己的”，只影响自己的消息列表排序，所以存用户↔会话关系，不存在 Conversation 上。
+class ConversationPin(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id"))
+    __table_args__ = (db.UniqueConstraint("user_id", "conversation_id", name="uq_pin"),)
+
+
+# 当前用户置顶了哪些会话 id（集合，列表排序用）
+def _pinned_conv_ids(user):
+    rows = (db.session.query(ConversationPin.conversation_id)
+            .filter(ConversationPin.user_id == user.id).all())
+    return {r[0] for r in rows}
+
+
 # Flask-Login 需要这个函数，用来根据 id 找回用户
 @login_manager.user_loader
 def load_user(user_id):
@@ -1047,8 +1063,25 @@ def meeting():
     return render_template("meeting.html")
 
 
+def _chat_time_label(dt):
+    """会话列表的时间显示（微信式）：今天→时分，昨天→“昨天”，今年→月-日，更早→年-月-日。
+    注意：库里存的是 UTC 时间，这里和原来的 %H:%M 显示保持同一基准，不引入时区改动。"""
+    if not dt:
+        return ""
+    now = datetime.utcnow()
+    d, today = dt.date(), now.date()
+    if d == today:
+        return dt.strftime("%H:%M")
+    if (today - d).days == 1:
+        return "昨天"
+    if d.year == today.year:
+        return dt.strftime("%m-%d")
+    return dt.strftime("%Y-%m-%d")
+
+
 def _build_chat_items():
-    """构建当前用户的会话列表数据（标题、最后一条消息、未读数）。"""
+    """构建当前用户的会话列表数据（标题、最后一条消息、未读数、是否置顶）。置顶的排最前。"""
+    pinned_ids = _pinned_conv_ids(current_user)
     items = []
     for c in _my_conversations():
         # 私聊对方已被移除 → 空壳会话，不显示在列表里（避免“（对方已退出）”刷屏）
@@ -1071,7 +1104,13 @@ def _build_chat_items():
             "last": last,
             "unread": _unread_count(c, current_user),
             "other_photo": other_photo,   # 对方头像文件名（无则 None → 模板用首字圆圈）
+            "pinned": c.id in pinned_ids,
+            "time_label": _chat_time_label(last.created_at) if last else "",
         })
+    # 排序（利用 Python 稳定排序，两步）：
+    #   先按最后消息时间倒序（无消息的排最后），再按是否置顶——置顶整体提到最前，组内时间顺序不变
+    items.sort(key=lambda it: (it["last"].created_at if it["last"] else datetime.min), reverse=True)
+    items.sort(key=lambda it: 0 if it["pinned"] else 1)
     return items
 
 
@@ -1356,7 +1395,26 @@ def chat_settings(conv_id):
         return redirect(url_for("chat"))
     others = [m.user for m in conv.memberships if m.user_id != current_user.id and m.user]
     other = others[0] if others else None
-    return render_template("chat_settings.html", conv=conv, other=other)
+    pinned = conv.id in _pinned_conv_ids(current_user)
+    return render_template("chat_settings.html", conv=conv, other=other, pinned=pinned)
+
+
+# ── 置顶/取消置顶一个会话（只影响自己的消息列表排序）──
+@app.route("/chat/<int:conv_id>/toggle-pin", methods=["POST"])
+@login_required
+def toggle_pin(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not _is_member(conv, current_user):
+        return {"ok": False, "error": "你不在这个会话里"}, 403
+    pin = ConversationPin.query.filter_by(user_id=current_user.id, conversation_id=conv.id).first()
+    if pin:
+        db.session.delete(pin)        # 已置顶 → 取消
+        pinned = False
+    else:
+        db.session.add(ConversationPin(user_id=current_user.id, conversation_id=conv.id))
+        pinned = True
+    db.session.commit()
+    return {"ok": True, "pinned": pinned}
 
 
 # ── 群信息页：看成员、改名、改头像、加人、移除、退群、解散 ──
@@ -1375,7 +1433,8 @@ def group_info(conv_id):
     ).order_by(User.name).all()
     return render_template("group_info.html", conv=conv, members=members,
                            candidates=candidates,
-                           can_manage=conv.can_manage(current_user))
+                           can_manage=conv.can_manage(current_user),
+                           pinned=conv.id in _pinned_conv_ids(current_user))
 
 
 @app.route("/chat/<int:conv_id>/rename", methods=["POST"])
