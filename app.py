@@ -1008,15 +1008,23 @@ def _total_unread(user):
     return sum(_unread_count(c, user) for c in convs)
 
 
-# 让所有模板都能拿到当前用户的未读总数（导航栏红点用）
+# 让所有模板都能拿到当前用户的未读总数（导航栏红点用）+ 管理员的待审核申请数（同门页“管理”红点用）
 @app.context_processor
 def inject_unread():
     if current_user.is_authenticated:
         try:
-            return {"unread_total": _total_unread(current_user)}
+            unread = _total_unread(current_user)
         except Exception:
-            return {"unread_total": 0}
-    return {"unread_total": 0}
+            unread = 0
+        # 只有管理员才需要待审核数；普通成员恒为 0，不浪费查询
+        pending = 0
+        if current_user.is_admin:
+            try:
+                pending = User.query.filter_by(status="pending").count()
+            except Exception:
+                pending = 0
+        return {"unread_total": unread, "pending_count": pending}
+    return {"unread_total": 0, "pending_count": 0}
 
 
 # ── 查询当前用户未读总数（前端在页面重新可见时主动拉，兜底实时推送漏掉的情况）──

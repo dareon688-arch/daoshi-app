@@ -65,7 +65,16 @@
             <span class="small" style="color:var(--muted);">你好，<strong style="color:var(--ink);">{{ current_user.name }}</strong></span>
             <div class="d-flex gap-1">
                 {% if current_user.is_admin %}
-                <a href="{{ url_for('admin_members') }}" class="btn btn-sm btn-bamboo">管理</a>
+                <a href="{{ url_for('admin_members') }}" class="btn btn-sm btn-bamboo position-relative">管理
+                    {# 有待审核申请时亮红点，显示条数；为 0 时不显示 #}
+                    <span style="position:absolute; top:-6px; right:-6px;
+                          background:var(--seal-red); color:#fff; font-size:11px; line-height:1;
+                          min-width:18px; height:18px; border-radius:9px; padding:0 5px;
+                          align-items:center; justify-content:center;
+                          display:{{ 'inline-flex' if pending_count and pending_count > 0 else 'none' }};">
+                        {{ pending_count if pending_count and pending_count < 100 else ('99+' if pending_count else '') }}
+                    </span>
+                </a>
                 {% endif %}
                 <a href="{{ url_for('settings') }}" class="btn btn-sm btn-bamboo">设置</a>
             </div>
