@@ -105,6 +105,18 @@
         </div>
         {% endif %}
 
+        <!-- 删除聊天记录（只删自己这边）-->
+        <div class="gf-card mb-3">
+            <div class="p-3">
+                <form method="POST" action="{{ url_for('clear_conversation', conv_id=conv.id) }}"
+                      onsubmit="return confirm('删除本群的聊天记录？\n（只删你这边，群里其他人不受影响，不可恢复）');">
+                    <button type="submit" class="btn btn-ink w-100"
+                            style="background:var(--seal-red); border-color:var(--seal-red);">删除聊天记录</button>
+                </form>
+                <div class="small mt-2" style="color:var(--muted);">只清除你这边的记录，群里其他人不受影响</div>
+            </div>
+        </div>
+
         <!-- 退群 / 解散 -->
         <div class="gf-card mb-3">
             <div class="p-3">

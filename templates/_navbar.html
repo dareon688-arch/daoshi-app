@@ -30,6 +30,9 @@
     {% endfor %}
 </nav>
 
+{# 全站加载提示音脚本：用户落地后第一次点任意处即自动解锁音频（不必发消息） #}
+<script src="{{ url_for('static', filename='sound.js') }}"></script>
+
 {# 实时更新红点：WebSocket 推送 + 多重兜底（手机连接易断，需要兜底） #}
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>查找聊天记录 · 老邢和他的学生们</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='guofeng.css') }}" rel="stylesheet">
+    {% include '_pwa_head.html' %}
+    <style>
+        .hl { background: #ffe08a; color: var(--ink); border-radius: 2px; padding: 0 1px; }
+    </style>
+</head>
+<body>
+    <div class="container py-4" style="max-width: 560px;">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="{{ url_for('chat') }}" class="btn btn-sm btn-bamboo">‹ 返回</a>
+            <h1 class="brush m-0" style="font-size:20px;">查找聊天记录</h1>
+            <span style="width:48px;"></span>
+        </div>
+
+        <!-- 搜索框 -->
+        <form method="GET" class="mb-3 d-flex gap-2">
+            <input type="text" name="q" class="form-control" value="{{ q }}"
+                   placeholder="输入关键词，搜所有聊天" autofocus>
+            <button type="submit" class="btn btn-ink" style="white-space:nowrap;">搜索</button>
+        </form>
+
+        {% if q %}
+        <div class="small mb-2" style="color:var(--muted);">
+            “{{ q }}” 共找到 {{ results|length }} 条
+        </div>
+            {% if not results %}
+            <p class="text-center py-4" style="color:var(--muted);">没找到包含「{{ q }}」的聊天记录</p>
+            {% endif %}
+            {% for r in results %}
+            <!-- 点一条 → 跳到那个会话（带上关键词，进去后会话内也高亮） -->
+            <a href="{{ url_for('conversation', conv_id=r.conv_id) }}?q={{ q | urlencode }}"
+               class="gf-card d-block mb-2 text-decoration-none" style="color:var(--ink);">
+                <div class="p-2">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-semibold">{{ r.conv_title }}</span>
+                        <span class="small" style="color:var(--muted);">{{ r.time }}</span>
+                    </div>
+                    <div class="small mt-1" style="color:var(--muted);">
+                        {{ r.sender }}：{{ r.content }}
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        {% else %}
+        <p class="text-center py-5" style="color:var(--muted);">输入关键词，在你的全部聊天里查找</p>
+        {% endif %}
+
+    </div>
+
+    <script>
+        // 把结果里命中的关键词高亮（纯前端，安全：只对文本节点替换）
+        (function () {
+            var q = {{ q | tojson }};
+            if (!q) return;
+            var esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            var re = new RegExp('(' + esc + ')', 'gi');
+            document.querySelectorAll('.gf-card .small').forEach(function (el) {
+                // 只处理纯文本，避免破坏结构
+                if (el.children.length === 0) {
+                    el.innerHTML = el.textContent.replace(re, '<span class="hl">$1</span>');
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

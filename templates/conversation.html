@@ -44,29 +44,59 @@
         .msg .time { font-size: 10px; color: var(--muted); margin-top: 2px; }
         .recalled-tip { font-size: 12px; color: var(--muted); font-style: italic;
                         text-align: center; width: 100%; padding: 4px 0; }
-        .recall-btn { font-size: 11px; color: var(--seal-red); cursor: pointer;
-                      margin-top: 2px; background: none; border: none; padding: 0; }
+        .msg-content { -webkit-user-select: none; user-select: none;
+                       -webkit-touch-callout: none; }  /* 长按时不弹系统菜单 */
+        /* 长按弹出的撤回浮层 */
+        #recallPop {
+            position: fixed; z-index: 3000; display: none;
+            background: #333; color: #fff; border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,.3);
+            transform: translate(-50%, -100%); white-space: nowrap;
+            display: none;
+        }
+        #recallPop.show { display: flex; }
+        #recallPop .pop-btn {
+            padding: 8px 16px; font-size: 14px; cursor: pointer;
+        }
+        #recallPop .pop-btn + .pop-btn { border-left: 1px solid #555; }
+        #recallPop::after {  /* 小三角指向消息 */
+            content: ''; position: absolute; left: 50%; bottom: -5px;
+            transform: translateX(-50%);
+            border: 6px solid transparent; border-top-color: #333; border-bottom: 0;
+        }
+        /* 会话内搜索：命中高亮 */
+        .hl { background: #ffe08a; color: var(--ink); border-radius: 2px; }
+        /* 会话内搜索条 */
+        .chat-search {
+            flex: 0 0 auto; display: none; gap: 6px; padding: 8px 10px;
+            background: var(--xuan-paper); border-bottom: 1px solid var(--border-soft);
+            max-width: 600px; width: 100%; margin: 0 auto;
+        }
+        .chat-search.show { display: flex; }
     </style>
 </head>
 <body>
     <div class="chat-header">
         <a href="{{ url_for('chat') }}" class="btn btn-sm btn-bamboo">‹</a>
         <span class="brush flex-grow-1" style="font-size:18px;">{{ title }}</span>
+        <!-- 查找本会话聊天记录 -->
+        <button type="button" id="searchToggle" class="btn btn-sm btn-bamboo" title="查找聊天记录">🔍</button>
         {% if conv.is_group %}
-            <!-- 群聊：点右上角进群信息（看成员/管理） -->
+            <!-- 群聊：点右上角进群信息（看成员/管理/删聊天记录） -->
             <a href="{{ url_for('group_info', conv_id=conv.id) }}" class="btn btn-sm btn-bamboo">···</a>
-        {% elif other %}
-            <!-- 私聊：右上角对方头像，点击看详细资料（像微信） -->
-            <a href="{{ url_for('member_detail', user_id=other.id) }}" style="text-decoration:none;">
-                {% if other.photo %}
-                    <img src="{{ url_for('uploaded_file', filename=other.photo) }}"
-                         class="rounded-circle" width="36" height="36" style="object-fit:cover;">
-                {% else %}
-                    <span class="rounded-circle d-inline-flex align-items-center justify-content-center"
-                          style="width:36px;height:36px; background:var(--bamboo); color:#fff;">{{ other.name[0] }}</span>
-                {% endif %}
-            </a>
+        {% else %}
+            <!-- 私聊：点右上角进聊天设置（看资料/删聊天记录），像微信 -->
+            <a href="{{ url_for('chat_settings', conv_id=conv.id) }}" class="btn btn-sm btn-bamboo">···</a>
         {% endif %}
+    </div>
+
+    <!-- 会话内搜索条（点“查找”展开；从全局搜索跳进来会自动展开并定位） -->
+    <div class="chat-search {{ 'show' if search_q else '' }}" id="chatSearch">
+        <input type="text" id="searchInput" class="form-control form-control-sm"
+               placeholder="在本会话里查找" value="{{ search_q or '' }}">
+        <button type="button" id="searchPrev" class="btn btn-sm btn-bamboo">↑</button>
+        <button type="button" id="searchNext" class="btn btn-sm btn-bamboo">↓</button>
+        <span id="searchCount" class="small align-self-center" style="color:var(--muted); white-space:nowrap;"></span>
     </div>
 
     <div class="chat-body" id="chatBody">
@@ -80,19 +110,24 @@
             {% if m.recalled %}
             <div class="recalled-tip">{{ '你' if m.sender_id == current_user.id else m.sender.name }}撤回了一条消息</div>
             {% elif m.msg_type == 'image' and m.image %}
-            <a href="{{ url_for('uploaded_file', filename=m.image) }}" target="_blank">
+            <a href="{{ url_for('uploaded_file', filename=m.image) }}" target="_blank"
+               class="msg-content"{% if can_recall %} data-can-recall="1"{% endif %}>
                 <img src="{{ url_for('uploaded_file', filename=m.image) }}"
                      style="max-width:200px; max-height:240px; border-radius:10px; object-fit:cover;">
             </a>
             <div class="time">{{ m.created_at.strftime('%H:%M') }}</div>
-            {% if can_recall %}<button class="recall-btn" onclick="recallMsg({{ m.id }})">撤回</button>{% endif %}
             {% else %}
-            <div class="bubble">{{ m.content | urlize(target='_blank') }}</div>
+            <div class="bubble msg-content"{% if can_recall %} data-can-recall="1"{% endif %}>{{ m.content | urlize(target='_blank') }}</div>
             <div class="time">{{ m.created_at.strftime('%H:%M') }}</div>
-            {% if can_recall %}<button class="recall-btn" onclick="recallMsg({{ m.id }})">撤回</button>{% endif %}
             {% endif %}
         </div>
         {% endfor %}
+    </div>
+
+    <!-- 长按消息弹出的操作浮层（撤回 / 删除，默认隐藏） -->
+    <div id="recallPop">
+        <span class="pop-btn" id="popRecall">撤回</span>
+        <span class="pop-btn" id="popDelete">删除</span>
     </div>
 
     <form class="chat-input" id="sendForm" autocomplete="off">
@@ -133,9 +168,11 @@
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='sound.js') }}"></script>
     <script>
         const convId = {{ conv.id }};
         const isGroup = {{ 'true' if conv.is_group else 'false' }};
+        const mySound = '{{ current_user.sound or "dingdong" }}';  // 我选的提示音
         const body = document.getElementById('chatBody');
         let lastId = {{ msgs[-1].id if msgs else 0 }};
 
@@ -164,22 +201,20 @@
             }
             let html = '';
             if (isGroup && !m.mine) html += '<div class="who">' + esc(m.sender_name) + '</div>';
+            // 自己的 或 管理员/群主 → 这条消息可撤回（长按气泡才弹撤回菜单）
+            const canRecall = (m.mine || canManageAll) ? ' data-can-recall="1"' : '';
             if (m.type === 'image' && m.image_url) {
-                html += '<a href="' + m.image_url + '" target="_blank">' +
+                html += '<a href="' + m.image_url + '" target="_blank" class="msg-content"' + canRecall + '>' +
                         '<img src="' + m.image_url + '" style="max-width:200px;max-height:240px;border-radius:10px;object-fit:cover;"></a>';
             } else {
-                html += '<div class="bubble">' + linkify(m.content) + '</div>';
+                html += '<div class="bubble msg-content"' + canRecall + '>' + linkify(m.content) + '</div>';
             }
             html += '<div class="time">' + m.time + '</div>';
-            // 自己的 或 管理员/群主 → 显示撤回按钮
-            if (m.mine || canManageAll) {
-                html += '<button class="recall-btn" onclick="recallMsg(' + m.id + ')">撤回</button>';
-            }
             div.innerHTML = html;
             body.appendChild(div);
         }
 
-        // 撤回消息
+        // 撤回消息（对所有人，显示“撤回了一条消息”）
         async function recallMsg(msgId) {
             if (!confirm('撤回这条消息？')) return;
             try {
@@ -189,6 +224,90 @@
                 else { alert(data.error || '撤回失败'); }
             } catch (err) { console.error(err); }
         }
+
+        // 删除消息（只对自己隐藏，对方还能看到；直接从我的界面移除）
+        async function deleteMsg(msgId) {
+            if (!confirm('删除这条消息？\n（只删你这边，对方仍可见）')) return;
+            try {
+                const r = await fetch('/chat/' + convId + '/delete-msg/' + msgId, { method: 'POST' });
+                const data = await r.json();
+                if (data.ok) {
+                    const el = body.querySelector('[data-msg-id="' + msgId + '"]');
+                    if (el) el.remove();
+                } else { alert(data.error || '删除失败'); }
+            } catch (err) { console.error(err); }
+        }
+
+        // ===== 长按消息 → 弹出操作浮层（撤回/删除，避免误触） =====
+        (function () {
+            const pop = document.getElementById('recallPop');
+            const btnRecall = document.getElementById('popRecall');
+            const btnDelete = document.getElementById('popDelete');
+            let pressTimer = null;       // 长按计时器
+            let targetMsgId = null;      // 当前长按的是哪条消息
+            let justOpened = false;      // 刚弹出，忽略紧随的合成 click（防手指抬起立刻关掉）
+            const HOLD_MS = 450;         // 按住多久算长按
+
+            // 显示浮层在某个气泡的正上方
+            function showPop(contentEl) {
+                const wrap = contentEl.closest('.msg');
+                if (!wrap) return;
+                targetMsgId = parseInt(wrap.dataset.msgId, 10);
+                // “撤回”只对可撤回的消息显示；“删除”任何消息都能（只删自己这边）
+                const canRecall = contentEl.dataset.canRecall === '1';
+                btnRecall.style.display = canRecall ? 'block' : 'none';
+                const rect = contentEl.getBoundingClientRect();
+                pop.style.left = (rect.left + rect.width / 2) + 'px';
+                pop.style.top = (rect.top - 8) + 'px';
+                pop.classList.add('show');
+                justOpened = true;
+                setTimeout(function () { justOpened = false; }, 350);
+            }
+            function hidePop() { pop.classList.remove('show'); targetMsgId = null; }
+
+            // 找到被按的消息内容元素（撤回了的不弹）
+            function hitMsg(e) {
+                const el = e.target.closest('.msg-content');
+                if (!el) return null;
+                if (el.closest('.msg').querySelector('.recalled-tip')) return null;
+                return el;
+            }
+
+            // —— 手机：touch 长按 ——
+            body.addEventListener('touchstart', function (e) {
+                const el = hitMsg(e);
+                if (!el) return;
+                pressTimer = setTimeout(function () {
+                    showPop(el);
+                    if (navigator.vibrate) navigator.vibrate(15);  // 轻微震动反馈
+                }, HOLD_MS);
+            }, { passive: true });
+            // 手指移动或抬起，取消长按（移动说明是在滑动，不是长按）
+            body.addEventListener('touchmove', function () { clearTimeout(pressTimer); });
+            body.addEventListener('touchend', function () { clearTimeout(pressTimer); });
+
+            // —— 电脑：右键当作长按 ——
+            body.addEventListener('contextmenu', function (e) {
+                const el = hitMsg(e);
+                if (!el) return;
+                e.preventDefault();  // 不弹浏览器右键菜单
+                showPop(el);
+            });
+
+            // 点“撤回” / “删除”
+            btnRecall.addEventListener('click', function (e) {
+                e.stopPropagation(); const id = targetMsgId; hidePop(); if (id) recallMsg(id);
+            });
+            btnDelete.addEventListener('click', function (e) {
+                e.stopPropagation(); const id = targetMsgId; hidePop(); if (id) deleteMsg(id);
+            });
+            // 点别处 / 滚动 → 收起浮层（justOpened 时忽略：那是长按抬手的合成 click）
+            document.addEventListener('click', function (e) {
+                if (justOpened) return;
+                if (!pop.contains(e.target)) hidePop();
+            });
+            body.addEventListener('scroll', hidePop);
+        })();
 
         // 把某条消息显示成“已撤回”
         function markRecalled(msgId, mine) {
@@ -201,6 +320,7 @@
         // 发送文字消息
         document.getElementById('sendForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (window.unlockSound) window.unlockSound();  // 发消息时顺手解锁音频，确保对方回复能响
             const input = document.getElementById('msgInput');
             const text = input.value.trim();
             if (!text) return;
@@ -275,8 +395,11 @@
                 const r = await fetch('/chat/' + convId + '/poll?after=' + lastId);
                 const data = await r.json();
                 if (data.ok && data.messages.length) {
+                    // 这批里有没有“别人发来的”消息？有就响一次提示音（自己发的不响）
+                    var hasIncoming = data.messages.some(function (m) { return !m.mine; });
                     data.messages.forEach(m => { addMsg(m); lastId = Math.max(lastId, m.id); });
                     scrollToBottom();
+                    if (hasIncoming && mySound !== 'off') playSound(mySound);
                 }
                 // 处理别人撤回的消息：把已显示但被标记撤回的消息更新成“撤回了一条消息”
                 if (data.ok && data.recalled) {
@@ -287,8 +410,74 @@
                 }
             } catch (err) { console.error(err); }
         }
-        // 每 2 秒拉一次新消息
-        setInterval(poll, 2000);
+        // 每 1 秒拉一次新消息（页面在前台时；缩短间隔让提示音更及时）
+        setInterval(function () { if (!document.hidden) poll(); }, 1000);
+        // 从后台切回前台时立刻补拉一次（手机锁屏/切app回来不漏消息）
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) poll();
+        });
+
+        // ===== 会话内查找：高亮命中、上下跳转 =====
+        (function () {
+            const bar = document.getElementById('chatSearch');
+            const input = document.getElementById('searchInput');
+            const toggle = document.getElementById('searchToggle');
+            const countEl = document.getElementById('searchCount');
+            let hits = [];      // 命中的 .bubble 元素
+            let cur = -1;       // 当前定位到第几个
+
+            // 清掉之前的高亮：把 .bubble 里的 <span class="hl"> 还原成纯文本
+            function clearHL() {
+                body.querySelectorAll('.bubble').forEach(function (b) {
+                    if (b.querySelector('.hl')) b.innerHTML = b.textContent;
+                });
+                hits = []; cur = -1;
+            }
+            function esc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+            function doSearch() {
+                clearHL();
+                const q = input.value.trim();
+                if (!q) { countEl.textContent = ''; return; }
+                const re = new RegExp('(' + esc(q) + ')', 'gi');
+                body.querySelectorAll('.bubble').forEach(function (b) {
+                    // 只对纯文本气泡处理（含链接的也安全：用 textContent 重建）
+                    if (re.test(b.textContent)) {
+                        re.lastIndex = 0;
+                        b.innerHTML = b.textContent.replace(re, '<span class="hl">$1</span>');
+                        hits.push(b);
+                    }
+                });
+                countEl.textContent = hits.length ? ('共 ' + hits.length + ' 处') : '无结果';
+                if (hits.length) { cur = 0; jumpTo(0); }
+            }
+            function jumpTo(i) {
+                if (!hits.length) return;
+                cur = (i + hits.length) % hits.length;
+                hits.forEach(function (b, k) {
+                    b.querySelectorAll('.hl').forEach(function (s) {
+                        s.style.background = (k === cur) ? '#ff9d3a' : '#ffe08a';
+                    });
+                });
+                hits[cur].scrollIntoView({ block: 'center', behavior: 'smooth' });
+                countEl.textContent = (cur + 1) + ' / ' + hits.length;
+            }
+
+            toggle.addEventListener('click', function () {
+                bar.classList.toggle('show');
+                if (bar.classList.contains('show')) { input.focus(); }
+                else { clearHL(); countEl.textContent = ''; }
+            });
+            input.addEventListener('input', doSearch);
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); jumpTo(cur + 1); }
+            });
+            document.getElementById('searchNext').addEventListener('click', function () { jumpTo(cur + 1); });
+            document.getElementById('searchPrev').addEventListener('click', function () { jumpTo(cur - 1); });
+
+            // 从全局搜索带 ?q= 进来：自动执行一次搜索并定位
+            if (input.value.trim()) { doSearch(); }
+        })();
     </script>
 </body>
 </html>

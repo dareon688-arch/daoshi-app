@@ -23,42 +23,63 @@
           {% endfor %}{% endif %}
         {% endwith %}
 
-        <!-- 主题颜色 -->
+        <!-- 外观主题 -->
         <div class="gf-card mb-3">
             <div class="p-3">
-                <div class="brush mb-2" style="font-size:18px;">主题颜色</div>
+                <div class="brush mb-2" style="font-size:18px;">外观主题</div>
                 <form method="POST" action="{{ url_for('set_theme') }}">
-                    <div class="d-flex gap-3 mb-3">
-                        {% set themes = [('bamboo','竹青','#5f7d5a'), ('ink','墨黑','#3a3a3a'), ('coral','朱砂','#b1322f')] %}
-                        {% for val, label, color in themes %}
-                        <label class="text-center" style="cursor:pointer;">
+                    <div class="d-flex gap-2 mb-2">
+                        {# 每套：名字、副标题、(背景色, 文字色, 主色) #}
+                        {% set themes = [
+                            ('bamboo','竹青','清雅','#f6f2e7','#1a1a1a','#5f7d5a'),
+                            ('ink',   '墨黑','夜读','#2b2b2e','#f1ece0','#c79a52'),
+                            ('azure', '淡蓝','清波','#eaf2f9','#16334d','#2f6fa8')
+                        ] %}
+                        {% for val, label, sub, bg, fg, main in themes %}
+                        <label class="flex-grow-1 text-center" style="cursor:pointer;">
                             <input type="radio" name="theme" value="{{ val }}" hidden
                                    {% if current_user.theme == val %}checked{% endif %}
                                    onchange="this.form.submit()">
-                            <div style="width:46px; height:46px; border-radius:50%; background:{{ color }};
-                                 border:3px solid {% if current_user.theme == val %}var(--ink){% else %}transparent{% endif %};"></div>
-                            <div class="small mt-1" style="color:var(--muted);">{{ label }}</div>
+                            <!-- 整套外观预览：背景+文字+主色条 -->
+                            <div style="border-radius:10px; overflow:hidden; background:{{ bg }};
+                                 border:3px solid {% if current_user.theme == val %}var(--seal-red){% else %}transparent{% endif %};
+                                 box-shadow:0 2px 8px rgba(0,0,0,.1);">
+                                <div style="padding:10px 4px 4px; color:{{ fg }}; font-size:13px;">甲</div>
+                                <div style="height:8px; background:{{ main }};"></div>
+                            </div>
+                            <div class="mt-1" style="font-size:13px;">{{ label }}
+                                {% if current_user.theme == val %}<span style="color:var(--seal-red);">✓</span>{% endif %}
+                            </div>
+                            <div style="font-size:11px; color:var(--muted);">{{ sub }}</div>
                         </label>
                         {% endfor %}
                     </div>
-                    <div class="small" style="color:var(--muted);">点一下颜色即可切换</div>
+                    <div class="small" style="color:var(--muted);">点一下即可切换整套外观</div>
                 </form>
             </div>
         </div>
 
-        <!-- 消息提醒 -->
+        <!-- 消息提示音 -->
         <div class="gf-card mb-3">
             <div class="p-3">
-                <div class="brush mb-2" style="font-size:18px;">消息提醒</div>
-                <form method="POST" action="{{ url_for('set_notify') }}">
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" role="switch" id="notifySwitch"
-                               name="notify_on" value="1"
-                               {% if current_user.notify_on %}checked{% endif %}
-                               onchange="this.form.submit()">
-                        <label class="form-check-label" for="notifySwitch">显示未读消息红点</label>
+                <div class="brush mb-2" style="font-size:18px;">消息提示音</div>
+                <form method="POST" action="{{ url_for('set_sound') }}" id="soundForm">
+                    {% set sounds = [('dingdong','叮咚'), ('water','水滴'), ('crisp','清脆'), ('off','关闭')] %}
+                    {% for val, label in sounds %}
+                    <div class="d-flex align-items-center justify-content-between py-1">
+                        <label class="form-check-label flex-grow-1" style="cursor:pointer;">
+                            <input class="form-check-input me-2" type="radio" name="sound" value="{{ val }}"
+                                   {% if current_user.sound == val %}checked{% endif %}
+                                   onchange="document.getElementById('soundForm').submit()">
+                            {{ label }}
+                        </label>
+                        {% if val != 'off' %}
+                        <button type="button" class="btn btn-sm btn-bamboo"
+                                onclick="playSound('{{ val }}')">试听</button>
+                        {% endif %}
                     </div>
-                    <div class="small mt-1" style="color:var(--muted);">关掉后，导航和会话上不再显示未读数字</div>
+                    {% endfor %}
+                    <div class="small mt-1" style="color:var(--muted);">收到新消息时，打开着页面会播放提示音</div>
                 </form>
             </div>
         </div>
@@ -74,5 +95,7 @@
         </div>
 
     </div>
+
+    <script src="{{ url_for('static', filename='sound.js') }}"></script>
 </body>
 </html>

@@ -77,10 +77,7 @@ def push_unread(user_id):
     """给某个用户推送一次‘未读数变化’事件，让前端实时更新红点。"""
     try:
         u = db.session.get(User, user_id)
-        if u and getattr(u, "notify_on", True):
-            total = _total_unread(u)
-        else:
-            total = 0
+        total = _total_unread(u) if u else 0
         socketio.emit("unread_update", {"total": total}, room=f"user_{user_id}")
     except Exception:
         pass
@@ -119,8 +116,9 @@ class User(db.Model, UserMixin):
     photo = db.Column(db.String(200), nullable=True)      # 个人照片的文件名（选填）
     is_admin = db.Column(db.Boolean, default=False)       # 是否管理员（能删任意相册照片）
     status = db.Column(db.String(20), default="approved") # approved=正常 / pending=待管理员审核
-    theme = db.Column(db.String(20), default="bamboo")    # 主题：bamboo竹青 / ink墨黑 / coral朱砂
+    theme = db.Column(db.String(20), default="bamboo")    # 主题：bamboo竹青 / ink墨黑 / azure淡蓝
     notify_on = db.Column(db.Boolean, default=True)       # 是否显示未读提醒红点
+    sound = db.Column(db.String(20), default="dingdong")  # 消息提示音：dingdong叮咚/water水滴/crisp清脆/off关闭
 
     # 把 program 代码转成中文显示用
     @property
@@ -233,6 +231,13 @@ class Conversation(db.Model):
         others = [m.user for m in self.memberships if m.user_id != viewer.id and m.user]
         return others[0].name if others else "（对方已退出）"
 
+    def is_orphan_private(self, viewer):
+        """私聊且对方账号已不存在（被移除）→ 这是个空壳会话，列表里应隐藏。"""
+        if self.is_group:
+            return False
+        others = [m.user for m in self.memberships if m.user_id != viewer.id and m.user]
+        return not others
+
 
 # ── 会话成员表：谁在哪个会话里 ──
 class Membership(db.Model):
@@ -258,6 +263,24 @@ class Message(db.Model):
 
     conversation = db.relationship("Conversation", back_populates="messages")
     sender = db.relationship("User")
+
+
+# ── 消息隐藏表：记录“某用户删除（隐藏）了某条消息” ──
+# 删除只对自己生效，不影响对方——所以不真删 Message 行，只记一条隐藏记录。
+class MessageHide(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    message_id = db.Column(db.Integer, db.ForeignKey("message.id"))
+    __table_args__ = (db.UniqueConstraint("user_id", "message_id", name="uq_hide"),)
+
+
+# 某用户在某会话里隐藏了哪些消息 id（集合，过滤显示用）
+def _hidden_ids(user, conv_id):
+    rows = (db.session.query(MessageHide.message_id)
+            .join(Message, Message.id == MessageHide.message_id)
+            .filter(MessageHide.user_id == user.id,
+                    Message.conversation_id == conv_id).all())
+    return {r[0] for r in rows}
 
 
 # Flask-Login 需要这个函数，用来根据 id 找回用户
@@ -389,19 +412,21 @@ def settings():
 @login_required
 def set_theme():
     theme = request.form.get("theme", "bamboo")
-    if theme in ("bamboo", "ink", "coral"):
+    if theme in ("bamboo", "ink", "azure"):
         current_user.theme = theme
         db.session.commit()
         flash("主题已更新 ✅")
     return redirect(url_for("settings"))
 
 
-@app.route("/settings/notify", methods=["POST"])
+@app.route("/settings/sound", methods=["POST"])
 @login_required
-def set_notify():
-    current_user.notify_on = (request.form.get("notify_on") == "1")
-    db.session.commit()
-    flash("提醒设置已保存 ✅")
+def set_sound():
+    sound = request.form.get("sound", "dingdong")
+    if sound in ("dingdong", "water", "crisp", "off"):
+        current_user.sound = sound
+        db.session.commit()
+        flash("提示音已更新 ✅")
     return redirect(url_for("settings"))
 
 
@@ -565,10 +590,28 @@ def admin_delete_member(user_id):
         flash("不能删除自己")
         return redirect(url_for("admin_members"))
     name = u.name
+    _cleanup_user_relations(u)   # 先清理他的会话/成员记录/消息，避免留下“（对方已退出）”空壳
     db.session.delete(u)
     db.session.commit()
     flash(f"已删除成员 {name}")
     return redirect(url_for("admin_members"))
+
+
+def _cleanup_user_relations(u):
+    """删一个用户前，清理他在聊天里留下的关联，避免产生孤儿会话/消息。
+    - 私聊会话（只有两个人）：直接整条删掉，对方列表里就不会再看到他
+    - 群聊：只把他从群里移除（删 Membership），群和别人发的消息都保留
+    - 他发过的消息：sender_id 置空（显示为匿名），不破坏群里的聊天记录
+    """
+    for mem in Membership.query.filter_by(user_id=u.id).all():
+        conv = mem.conversation
+        if conv and not conv.is_group:
+            db.session.delete(conv)   # 私聊整条删（会级联删掉其消息和两条成员记录）
+        else:
+            db.session.delete(mem)    # 群聊只把他踢出
+    # 群聊里他发过的消息：作者置空，保留内容不留孤儿外键
+    for msg in Message.query.filter_by(sender_id=u.id).all():
+        msg.sender_id = None
 
 
 # ── 编辑“我的信息”：只能改自己 ──
@@ -971,9 +1014,6 @@ def _total_unread(user):
 def inject_unread():
     if current_user.is_authenticated:
         try:
-            # 关了提醒开关就不显示红点
-            if getattr(current_user, "notify_on", True) is False:
-                return {"unread_total": 0}
             return {"unread_total": _total_unread(current_user)}
         except Exception:
             return {"unread_total": 0}
@@ -984,8 +1024,6 @@ def inject_unread():
 @app.route("/api/unread")
 @login_required
 def api_unread():
-    if getattr(current_user, "notify_on", True) is False:
-        return {"total": 0}
     try:
         return {"total": _total_unread(current_user)}
     except Exception:
@@ -1003,7 +1041,13 @@ def _build_chat_items():
     """构建当前用户的会话列表数据（标题、最后一条消息、未读数）。"""
     items = []
     for c in _my_conversations():
+        # 私聊对方已被移除 → 空壳会话，不显示在列表里（避免“（对方已退出）”刷屏）
+        if c.is_orphan_private(current_user):
+            continue
+        # 取最近一条“我没删过的”消息当列表预览
+        hidden = _hidden_ids(current_user, c.id)
         last = (Message.query.filter_by(conversation_id=c.id)
+                .filter(~Message.id.in_(hidden) if hidden else True)
                 .order_by(Message.created_at.desc()).first())
         items.append({
             "conv": c,
@@ -1027,6 +1071,39 @@ def chat():
 @login_required
 def chat_list():
     return render_template("_chat_list.html", items=_build_chat_items())
+
+
+# ── 全局搜索聊天记录：跨所有会话，找含关键词的文字消息 ──
+@app.route("/chat/search")
+@login_required
+def chat_search():
+    q = (request.args.get("q") or "").strip()
+    results = []
+    if q:
+        # 我所在的会话 id 列表
+        my_conv_ids = [c.id for c in _my_conversations()]
+        if my_conv_ids:
+            hits = (Message.query
+                    .filter(Message.conversation_id.in_(my_conv_ids),
+                            Message.recalled == False,
+                            Message.msg_type == "text",
+                            Message.content.ilike(f"%{q}%"))
+                    .order_by(Message.created_at.desc()).all())
+            for m in hits:
+                # 跳过我已删除（隐藏）的
+                if MessageHide.query.filter_by(user_id=current_user.id, message_id=m.id).first():
+                    continue
+                conv = m.conversation
+                if conv and not conv.is_orphan_private(current_user):
+                    results.append({
+                        "conv_id": conv.id,
+                        "conv_title": conv.title_for(current_user),
+                        "sender": m.sender.name if m.sender else "?",
+                        "content": m.content or "",
+                        "msg_id": m.id,
+                        "time": m.created_at.strftime("%Y-%m-%d %H:%M"),
+                    })
+    return render_template("chat_search.html", q=q, results=results)
 
 
 # ── 开始（或打开）和某人的私聊 ──
@@ -1100,8 +1177,13 @@ def conversation(conv_id):
         flash("你不在这个会话里")
         return redirect(url_for("chat"))
 
-    msgs = (Message.query.filter_by(conversation_id=conv.id)
+    hidden = _hidden_ids(current_user, conv.id)   # 我删除（隐藏）过的消息
+    msgs = [m for m in (Message.query.filter_by(conversation_id=conv.id)
             .order_by(Message.created_at.asc()).all())
+            if m.id not in hidden]
+
+    # 关键字搜索（会话内查找）：有 q 时只保留命中的文字消息，并标记给前端高亮
+    search_q = (request.args.get("q") or "").strip()
 
     # 更新“读到哪了”
     mem = Membership.query.filter_by(conversation_id=conv.id, user_id=current_user.id).first()
@@ -1117,7 +1199,8 @@ def conversation(conv_id):
         other = others[0] if others else None
 
     return render_template("conversation.html", conv=conv, msgs=msgs,
-                           title=conv.title_for(current_user), other=other)
+                           title=conv.title_for(current_user), other=other,
+                           search_q=search_q)
 
 
 def _msg_to_dict(m):
@@ -1205,6 +1288,56 @@ def recall_message(conv_id, msg_id):
                       {"conv_id": conv.id, "msg_id": msg.id},
                       room=f"user_{m.user_id}")
     return {"ok": True}
+
+
+# ── 删除单条消息（只对自己隐藏，不影响对方）──
+@app.route("/chat/<int:conv_id>/delete-msg/<int:msg_id>", methods=["POST"])
+@login_required
+def delete_message_for_me(conv_id, msg_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not _is_member(conv, current_user):
+        return {"ok": False, "error": "你不在这个会话里"}, 403
+    msg = db.get_or_404(Message, msg_id)
+    if msg.conversation_id != conv.id:
+        return {"ok": False, "error": "消息不属于这个会话"}, 400
+    # 已经隐藏过就不重复加
+    exists = MessageHide.query.filter_by(user_id=current_user.id, message_id=msg.id).first()
+    if not exists:
+        db.session.add(MessageHide(user_id=current_user.id, message_id=msg.id))
+        db.session.commit()
+    return {"ok": True}
+
+
+# ── 清空整条会话的聊天记录（只清自己这边，对方不受影响）──
+@app.route("/chat/<int:conv_id>/clear", methods=["POST"])
+@login_required
+def clear_conversation(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if not _is_member(conv, current_user):
+        flash("你不在这个会话里")
+        return redirect(url_for("chat"))
+    # 把该会话当前所有消息，对我隐藏（已隐藏的跳过）
+    already = _hidden_ids(current_user, conv.id)
+    msgs = Message.query.filter_by(conversation_id=conv.id).all()
+    for m in msgs:
+        if m.id not in already:
+            db.session.add(MessageHide(user_id=current_user.id, message_id=m.id))
+    db.session.commit()
+    # 不弹提示，直接回到（已清空的）会话页
+    return redirect(url_for("conversation", conv_id=conv.id))
+
+
+# ── 私聊设置页：看对方资料入口 + 删除聊天记录（像微信点右上角进来）──
+@app.route("/chat/<int:conv_id>/settings")
+@login_required
+def chat_settings(conv_id):
+    conv = db.get_or_404(Conversation, conv_id)
+    if conv.is_group or not _is_member(conv, current_user):
+        flash("无权查看")
+        return redirect(url_for("chat"))
+    others = [m.user for m in conv.memberships if m.user_id != current_user.id and m.user]
+    other = others[0] if others else None
+    return render_template("chat_settings.html", conv=conv, other=other)
 
 
 # ── 群信息页：看成员、改名、改头像、加人、移除、退群、解散 ──
@@ -1338,9 +1471,11 @@ def poll_messages(conv_id):
     if not _is_member(conv, current_user):
         return {"ok": False}, 403
     after = request.args.get("after", 0, type=int)
-    msgs = (Message.query
+    hidden = _hidden_ids(current_user, conv.id)   # 我删除（隐藏）过的不再推给前端
+    msgs = [m for m in (Message.query
             .filter(Message.conversation_id == conv.id, Message.id > after)
             .order_by(Message.created_at.asc()).all())
+            if m.id not in hidden]
     # 同时返回本会话里已被撤回的消息 id（让前端把已显示的消息标记成撤回）
     recalled_ids = [m.id for m in Message.query
                     .filter(Message.conversation_id == conv.id, Message.recalled == True).all()]
@@ -1393,6 +1528,12 @@ def auto_add_missing_columns():
 with app.app_context():
     db.create_all()
     auto_add_missing_columns()        # ← 自动补齐缺失的列
+
+    # 旧主题 coral（朱砂）已下线，改为 azure（淡蓝）。把选过朱砂的人平滑迁过去。
+    moved = User.query.filter_by(theme="coral").update({"theme": "azure"})
+    if moved:
+        db.session.commit()
+        print(f"已把 {moved} 个用户的主题从 coral 迁移到 azure")
 
     # 如果数据库里一个用户都没有（比如刚部署到云上、库是空的），
     # 就用环境变量创建一个初始管理员，方便第一次登录进去。

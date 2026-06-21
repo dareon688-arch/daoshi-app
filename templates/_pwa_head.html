@@ -1,6 +1,12 @@
 {# PWA 公共头部：在每个页面的 <head> 里 include 这一段，让整站都能“装成 App” #}
 <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+{% if current_user.is_authenticated and current_user.theme == 'ink' %}
+<meta name="theme-color" content="#1f1f22">
+{% elif current_user.is_authenticated and current_user.theme == 'azure' %}
+<meta name="theme-color" content="#d6e6f2">
+{% else %}
 <meta name="theme-color" content="#5f7d5a">
+{% endif %}
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-192.png') }}">
 <style>
   /* 关闭页面切换的视图过渡动画，让 tab 切换“直接出现”而不是滑入 */
@@ -8,11 +14,45 @@
   ::view-transition-old(root),
   ::view-transition-new(root) { animation: none !important; }
 </style>
-{# 按用户选择的主题覆盖主色（默认竹青绿） #}
+{# 按用户选择的主题，整套替换外观变量（默认竹青，不写则用 guofeng.css 里的） #}
 {% if current_user.is_authenticated and current_user.theme == 'ink' %}
-<style>:root { --bamboo:#3a3a3a; --bamboo-dark:#1a1a1a; }</style>
-{% elif current_user.is_authenticated and current_user.theme == 'coral' %}
-<style>:root { --bamboo:#b1322f; --bamboo-dark:#8a2522; }</style>
+{# 墨黑·夜读：深色背景 + 米白文字 + 金棕点缀。文字用高亮米白，注释也提亮，确保看清 #}
+<style>:root {
+    --xuan-paper:   #2b2b2e;
+    --xuan-paper-2: #1f1f22;
+    --ink:          #f1ece0;
+    --ink-soft:     #d3ccbb;
+    --seal-red:     #d6764f;
+    --bamboo:       #c79a52;
+    --bamboo-dark:  #e0c081;
+    --border-soft:  #4a4a52;
+    --card-bg:      #34343a;
+    --muted:        #a39c8b;
+}
+.brush { color: #f1ece0; }
+.btn-ink { background: #c79a52; color: #1f1f22; }
+.btn-ink:hover { background: #e0c081; color: #1f1f22; }
+.form-control { background: #3a3a40; color: #f1ece0; }
+.form-control::placeholder { color: #8c8678; }
+</style>
+{% elif current_user.is_authenticated and current_user.theme == 'azure' %}
+{# 淡蓝·清波：清爽天青背景 + 深蓝墨文字（对比度足够看清）+ 靛蓝主色 #}
+<style>:root {
+    --xuan-paper:   #eaf2f9;
+    --xuan-paper-2: #dde9f4;
+    --ink:          #16334d;
+    --ink-soft:     #2c4a66;
+    --seal-red:     #c0392b;
+    --bamboo:       #2f6fa8;
+    --bamboo-dark:  #1f5078;
+    --border-soft:  #c2d8ea;
+    --card-bg:      #f7fbff;
+    --muted:        #6b8298;
+}
+.brush { color: #16334d; }
+.btn-ink { background: #2f6fa8; color: #f7fbff; }
+.btn-ink:hover { background: #234f7a; color: #fff; }
+</style>
 {% endif %}
 <script>
   // 注册 Service Worker（让网页可被“添加到主屏幕”安装成 App）
