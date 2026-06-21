@@ -338,9 +338,8 @@ INVITE_CODE = os.environ.get("INVITE_CODE", "laoxing2024")
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
-    # 已登录的不用注册
-    if current_user.is_authenticated:
-        return redirect(url_for("home"))
+    # 注意：不拦已登录用户——点了“申请加入”就该看到注册页，
+    # 直接弹回主页会让人以为链接坏了（提交的是 status=pending 的新账号，不影响当前登录会话）
     if request.method == "POST":
         invite = request.form.get("invite", "").strip()
         username = request.form.get("username", "").strip()
