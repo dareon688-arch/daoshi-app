@@ -22,6 +22,8 @@ from flask_login import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask_socketio import SocketIO, join_room
+import json
+from pywebpush import webpush, WebPushException
 
 # ──────────────────────────────────────────────────────────────
 # 1. 基本配置
@@ -64,6 +66,15 @@ db = SQLAlchemy(app)
 # 实时推送：用 threading 模式（不依赖 eventlet/gevent，兼容性最好，几十人够用）
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
+# ── Web Push（VAPID）配置 ──
+# 公钥可公开（前端订阅要用）；私钥保密，走环境变量 VAPID_PRIVATE_KEY（systemd 配，绝不进 git）。
+# 本地测试时也需先设 VAPID_PRIVATE_KEY 环境变量，否则 send_web_push 会静默跳过（不报错）。
+# 环境变量里私钥是“单行 + 字面 \n”，这里 replace 还原成真正的多行 PEM。
+VAPID_PUBLIC_KEY = "BFHc2ZW6PF0LQ4JH5MM7iJK3TxwmkBxYdJZFAb-FPgIQOPfWKlF3xd0pKzgyoXVQmEvXx1Eg3N4BKwi79f74JDw"
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").replace("\\n", "\n")
+# VAPID 声明里的联系方式（推送服务出问题时联系用），用本站标识即可
+VAPID_CLAIMS = {"sub": "mailto:admin@daoshi.local"}
+
 
 @socketio.on("connect")
 def _on_connect(auth=None):
@@ -85,11 +96,61 @@ def push_unread(user_id, is_new=False):
         pass
 
 
+def send_web_push(user_id, title, body, url):
+    """给某用户的所有已订阅设备发一条 Web Push 系统通知。
+    失效订阅（对方卸载/换设备，推送服务返回 404/410）自动从库里删掉。
+    没配私钥（本地没设环境变量）时静默跳过，不影响主流程。"""
+    if not VAPID_PRIVATE_KEY:
+        return
+    subs = PushSubscription.query.filter_by(user_id=user_id).all()
+    payload = json.dumps({"title": title, "body": body, "url": url})
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                },
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims=dict(VAPID_CLAIMS),
+            )
+        except WebPushException as e:
+            # 404/410 = 订阅失效（卸载/换设备），删掉；其它错误（网络等）忽略，下次再试
+            status = getattr(e.response, "status_code", None)
+            if status in (404, 410):
+                db.session.delete(sub)
+                db.session.commit()
+        except Exception:
+            pass
+
+
 def _notify_conversation(conv, exclude_user_id=None):
-    """给会话里的成员（除发送者）推送未读更新，让红点实时出现并响提示音。"""
+    """给会话里的成员（除发送者）推送未读更新。
+    SocketIO 负责 app 开着时的红点+响铃；Web Push 负责 app 关着/锁屏时的系统通知。"""
+    # 取最新一条消息做推送正文
+    last = (Message.query.filter_by(conversation_id=conv.id)
+            .order_by(Message.id.desc()).first())
+    sender_name = last.sender.name if (last and last.sender) else "有人"
+    if last and last.msg_type == "image":
+        snippet = "[图片]"
+    else:
+        snippet = (last.content or "")[:30] if last else ""
+    # 群聊标题带群名，私聊标题就是发送者名
+    if conv.is_group:
+        title = conv.name or "群聊"
+        body = f"{sender_name}：{snippet}"
+    else:
+        title = sender_name
+        body = snippet
+    push_url = url_for("conversation", conv_id=conv.id)
+
     for m in conv.memberships:
-        if m.user_id != exclude_user_id:
-            push_unread(m.user_id, is_new=True)   # 来新消息 → 前端响铃
+        if m.user_id == exclude_user_id:
+            continue
+        push_unread(m.user_id, is_new=True)        # 现有：SocketIO 红点+响铃（不动）
+        if m.user and m.user.notify_on:            # 新增：尊重“关提醒”设置
+            send_web_push(m.user_id, title, body, push_url)  # 新增：系统通知
 
 
 # 登录管理器：负责“记住谁登录了”
@@ -1289,6 +1350,37 @@ def _msg_to_dict(m):
         # 发送者头像：有照片给 url，没有给 None（前端用名字首字圆圈兜底）
         "avatar_url": url_for("uploaded_file", filename=m.sender.photo) if (m.sender and m.sender.photo) else None,
     }
+
+
+# ── Web Push：前端取公钥 / 注册订阅 ──
+@app.route("/api/vapid-public-key")
+def vapid_public_key():
+    """前端订阅前来取公钥。"""
+    return {"key": VAPID_PUBLIC_KEY}
+
+
+@app.route("/api/push/subscribe", methods=["POST"])
+@login_required
+def push_subscribe():
+    """前端拿到浏览器订阅后调这个存库。按 endpoint upsert（同设备重订阅则更新）。"""
+    data = request.get_json(silent=True) or {}
+    endpoint = data.get("endpoint")
+    keys = data.get("keys") or {}
+    p256dh = keys.get("p256dh")
+    auth = keys.get("auth")
+    if not (endpoint and p256dh and auth):
+        return {"ok": False, "error": "订阅信息不完整"}, 400
+    sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    if sub:
+        sub.user_id = current_user.id
+        sub.p256dh = p256dh
+        sub.auth = auth
+    else:
+        sub = PushSubscription(user_id=current_user.id, endpoint=endpoint,
+                               p256dh=p256dh, auth=auth)
+        db.session.add(sub)
+    db.session.commit()
+    return {"ok": True}
 
 
 # ── 发文字消息 ──
