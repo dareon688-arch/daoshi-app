@@ -294,6 +294,21 @@ class ConversationPin(db.Model):
     __table_args__ = (db.UniqueConstraint("user_id", "conversation_id", name="uq_pin"),)
 
 
+# ── Web Push 订阅表：每个用户每台设备一条 ──
+# 浏览器订阅推送后会给一组凭证（endpoint + 两把密钥），存下来后端才能给这台设备发推送。
+# 一个人可多设备（手机+电脑各一条）。endpoint 唯一：同设备重订阅时更新而非重复插入。
+class PushSubscription(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    endpoint = db.Column(db.Text, nullable=False)          # 浏览器推送端点 URL
+    p256dh = db.Column(db.String(200), nullable=False)     # 加密公钥（base64）
+    auth = db.Column(db.String(100), nullable=False)       # 认证密钥（base64）
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("endpoint", name="uq_push_endpoint"),)
+
+    user = db.relationship("User")
+
+
 # 当前用户置顶了哪些会话 id（集合，列表排序用）
 def _pinned_conv_ids(user):
     rows = (db.session.query(ConversationPin.conversation_id)
