@@ -8,3 +8,5 @@ flask-socketio==5.6.1
 python-socketio==5.16.3
 python-engineio==4.13.2
 simple-websocket==1.1.0
+pywebpush==2.3.0
+py-vapid==1.9.4
