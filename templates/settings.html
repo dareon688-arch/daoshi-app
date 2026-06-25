@@ -84,6 +84,18 @@
             </div>
         </div>
 
+        <!-- 消息提醒（系统推送通知）-->
+        <div class="gf-card mb-3">
+            <div class="p-3">
+                <div class="brush mb-2" style="font-size:18px;">消息提醒</div>
+                <p class="small mb-2" style="color:var(--muted);">
+                    开启后，即使没打开本应用、手机锁屏，也能收到"有人给你发消息"的系统通知。
+                </p>
+                <button type="button" class="btn btn-ink w-100" id="pushEnableBtn">开启消息提醒</button>
+                <div class="small mt-2" id="pushHint" style="color:var(--muted);"></div>
+            </div>
+        </div>
+
         <!-- 账号安全 -->
         <div class="gf-card mb-3">
             <div class="p-3">
@@ -97,5 +109,60 @@
     </div>
 
     <script src="{{ url_for('static', filename='sound.js') }}"></script>
+    <script src="{{ url_for('static', filename='push-subscribe.js') }}"></script>
+    <script>
+      (function () {
+        var btn = document.getElementById("pushEnableBtn");
+        var hint = document.getElementById("pushHint");
+        if (!btn) return;
+
+        function render() {
+          var perm = daoshiPush.permission();
+          if (perm === "unsupported") {
+            btn.disabled = true;
+            btn.textContent = "当前浏览器不支持";
+            hint.textContent = "建议用 Chrome / Edge / Safari 打开。";
+          } else if (perm === "granted") {
+            btn.disabled = true;
+            btn.textContent = "✓ 已开启消息提醒";
+            hint.textContent = "如需关闭，请在系统/浏览器的通知设置里操作。";
+          } else if (daoshiPush.isIOS() && !daoshiPush.isStandalone()) {
+            btn.textContent = "开启消息提醒";
+            hint.innerHTML = "iPhone/iPad 需先把本应用装到主屏幕：点底部 <b>分享</b> → <b>添加到主屏幕</b>，再从主屏幕图标打开本页开启。";
+          } else {
+            btn.textContent = "开启消息提醒";
+            hint.textContent = "";
+          }
+        }
+
+        btn.addEventListener("click", function () {
+          btn.disabled = true;
+          btn.textContent = "正在开启…";
+          daoshiPush.enable().then(function (r) {
+            if (r.ok) {
+              btn.textContent = "✓ 已开启消息提醒";
+              hint.textContent = "成功！以后有新消息会弹系统通知。";
+            } else if (r.reason === "need-install") {
+              btn.disabled = false;
+              btn.textContent = "开启消息提醒";
+              hint.innerHTML = "请先把本应用装到主屏幕：点底部 <b>分享</b> → <b>添加到主屏幕</b>，再从主屏幕图标打开本页开启。";
+            } else if (r.reason === "denied") {
+              btn.disabled = false;
+              btn.textContent = "重新开启";
+              hint.textContent = "你拒绝了通知权限。如想开启，请到系统/浏览器通知设置里允许本站。";
+            } else if (r.reason === "unsupported") {
+              btn.disabled = true;
+              btn.textContent = "当前浏览器不支持";
+            } else {
+              btn.disabled = false;
+              btn.textContent = "重试";
+              hint.textContent = "开启失败，请稍后再试。";
+            }
+          });
+        });
+
+        render();
+      })();
+    </script>
 </body>
 </html>
